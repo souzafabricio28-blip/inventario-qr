@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Etiquetas QR - Inventário QR{% endblock %}
+{% block content %}
+<style>
+    @media print {
+        body * { visibility: hidden; }
+        #print-area, #print-area * { visibility: visible; }
+        #print-area { position: absolute; left: 0; top: 0; width: 100%; }
+        #print-area .etiqueta-item {
+            width: 90mm; height: 60mm; margin: 2mm; padding: 3mm;
+            float: left; page-break-inside: avoid;
+            border: none !important; box-shadow: none !important;
+            text-align: center; font-family: 'Segoe UI', sans-serif;
+        }
+        #print-area .etiqueta-item img { width: 50mm; height: auto; }
+        #print-area .etiqueta-item .info { font-size: 8pt; }
+        #print-area .etiqueta-item .info .nome { font-size: 9pt; font-weight: bold; }
+        @page { margin: 5mm; size: 100mm 70mm; }
+    }
+    .etiqueta-item { width: 100%; }
+</style>
+
+<div class="bg-white rounded-xl shadow-md p-6 no-print">
+    <h2 class="text-2xl font-bold mb-4"><i class="fas fa-tag text-indigo-600"></i> Impressão de Etiquetas</h2>
+    <div class="flex space-x-3 mb-4">
+        <input type="text" id="input_ean" placeholder="Digite ou leia o EAN..."
+               class="flex-1 border rounded-lg px-4 py-2 font-mono" onkeydown="if(event.key==='Enter')adicionarEan()">
+        <button onclick="adicionarEan()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
+            <i class="fas fa-plus"></i> Adicionar
+        </button>
+    </div>
+    <div id="lista_eans" class="flex flex-wrap gap-2 mb-4"></div>
+    <div class="flex flex-wrap gap-2">
+        <button onclick="gerarEtiquetas()" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-bold">
+            <i class="fas fa-print"></i> Gerar Etiquetas
+        </button>
+        <button onclick="imprimirDireto()" class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 font-bold">
+            <i class="fas fa-print"></i> Imprimir
+        </button>
+        <button onclick="limparLista()" class="bg-gray-300 px-4 py-2 rounded-lg hover:bg-gray-400">Limpar</button>
+        <button onclick="gerarTodas()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+            <i class="fas fa-boxes"></i> Todos Produtos
+        </button>
+    </div>
+</div>
+
+<div id="area_etiquetas" class="mt-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+<div id="print-area" class="hidden"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+    let eansParaEtiqueta = [];
+    let ultimasEtiquetas = [];
+
+    function adicionarEan() {
+        const input = document.getElementById('input_ean');
+        const ean = input.value.trim();
+        if (!ean) return;
+        if (!eansParaEtiqueta.includes(ean)) eansParaEtiqueta.push(ean);
+        input.value = '';
+        renderListaEans();
+        input.focus();
+    }
+
+    function renderListaEans() {
+        const div = document.getElementById('lista_eans');
+        if (eansParaEtiqueta.length === 0) {
+            div.innerHTML = '<p class="text-gray-400 text-sm">Nenhum EAN selecionado</p>';
+            return;
+        }
+        div.innerHTML = eansParaEtiqueta.map((e,i) =>
+            `<span class="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm flex items-center space-x-1">
+                <span>${e}</span>
+                <button onclick="removerEan(${i})" class="text-red-500 hover:text-red-700">&times;</button>
+            </span>`
+        ).join('');
+    }
+
+    function removerEan(i) { eansParaEtiqueta.splice(i,1); renderListaEans(); }
+    function limparLista() { eansParaEtiqueta = []; ultimasEtiquetas = []; renderListaEans(); document.getElementById('area_etiquetas').innerHTML = ''; document.getElementById('print-area').innerHTML = ''; }
+
+    async function gerarEtiquetas() {
+        if (eansParaEtiqueta.length === 0) return mostrarToast('Adicione ao menos um EAN', 'erro');
+        const r = await fetch('/api/etiquetas', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({eans:eansParaEtiqueta}) });
+        ultimasEtiquetas = await r.json();
+        renderEtiquetas(ultimasEtiquetas);
+        renderPrintArea(ultimasEtiquetas);
+    }
+
+    async function gerarTodas() {
+        const r = await fetch('/api/produtos');
+        const produtos = await r.json();
+        const eans = produtos.map(p => p.ean);
+        if (eans.length === 0) return mostrarToast('Nenhum produto cadastrado', 'erro');
+        const r2 = await fetch('/api/etiquetas', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({eans}) });
+        ultimasEtiquetas = await r2.json();
+        renderEtiquetas(ultimasEtiquetas);
+        renderPrintArea(ultimasEtiquetas);
+    }
+
+    function renderEtiquetas(etiquetas) {
+        const div = document.getElementById('area_etiquetas');
+        div.innerHTML = etiquetas.map(e => `
+            <div class="bg-white border rounded-lg p-3 text-center shadow-sm etiqueta-item">
+                <img src="${e.qrcode}" class="mx-auto w-32 h-32" alt="QR Code">
+                <div class="text-xs mt-2 space-y-0.5 info">
+                    <p class="font-bold nome">${e.produto.produto}</p>
+                    <p>${e.produto.marca || ''}</p>
+                    <p class="font-mono text-2xs">${e.produto.ean}</p>
+                    <p>ID: ${e.produto.codigo_interno || '-'} | Lote: ${e.produto.lote || '-'}</p>
+                    <p>${formatarData(e.produto.data_vencimento)}</p>
+                    <p>Base: ${e.produto.base_especifica || '-'}</p>
+                    <p>Dosagem: ${e.produto.instrucao_dosagem || '-'}</p>
+                </div>
+            </div>
+        `).join('');
+        mostrarToast(`${etiquetas.length} etiqueta(s) geradas.`, 'sucesso');
+    }
+
+    function renderPrintArea(etiquetas) {
+        const div = document.getElementById('print-area');
+        div.innerHTML = etiquetas.map(e => `
+            <div class="etiqueta-item">
+                <img src="${e.qrcode}" alt="QR">
+                <div class="info">
+                    <p class="nome">${e.produto.produto}</p>
+                    <p>${e.produto.marca || ''}</p>
+                    <p>${e.produto.ean}</p>
+                    <p>ID: ${e.produto.codigo_interno || '-'}</p>
+                    <p>Lote: ${e.produto.lote || '-'} | ${formatarData(e.produto.data_vencimento)}</p>
+                    <p>Base: ${e.produto.base_especifica || '-'}</p>
+                    <p>Dosagem: ${e.produto.instrucao_dosagem || '-'}</p>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function imprimirDireto() {
+        if (ultimasEtiquetas.length === 0) return mostrarToast('Gere as etiquetas primeiro', 'erro');
+        window.print();
+    }
+</script>
+{% endblock %}

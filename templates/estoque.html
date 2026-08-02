@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Estoque Atual - Inventário QR{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-xl shadow-md p-6 mb-4">
+        <h2 class="text-xl font-bold mb-3"><i class="fas fa-warehouse text-indigo-600"></i> Estoque Atual</h2>
+
+        <div class="flex space-x-2 mb-4">
+            <input type="text" id="busca-estoque" placeholder="Buscar por EAN ou produto..."
+                   class="flex-1 border rounded-lg px-4 py-2">
+            <button onclick="buscarEstoque()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg"><i class="fas fa-search"></i></button>
+            <button onclick="mostrarZerados()" class="bg-gray-200 text-gray-600 px-3 py-2 rounded-lg text-sm font-medium">Zerados</button>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-gray-50 text-gray-500 uppercase text-xs">
+                        <th class="text-left p-2">EAN</th>
+                        <th class="text-left p-2">Produto</th>
+                        <th class="text-center p-2">Qtd</th>
+                        <th class="text-center p-2">Lote</th>
+                        <th class="text-center p-2">Validade</th>
+                    </tr>
+                </thead>
+                <tbody id="estoque-body"></tbody>
+            </table>
+        </div>
+        <div id="estoque-vazio" class="hidden text-center text-gray-400 py-8">
+            <i class="fas fa-box-open text-4xl mb-2"></i>
+            <p>Nenhum produto em estoque</p>
+        </div>
+    </div>
+
+    <div id="zerados-section" class="hidden bg-white rounded-xl shadow-md p-4 mb-4">
+        <h3 class="font-bold text-sm mb-2 text-gray-500">Produtos sem estoque (zerados)</h3>
+        <div id="zerados-body" class="text-sm space-y-1 max-h-40 overflow-y-auto"></div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md p-4">
+        <h3 class="font-bold text-sm mb-2"><i class="fas fa-chart-pie text-gray-500"></i> Resumo</h3>
+        <div id="resumo-estoque" class="grid grid-cols-3 gap-3 text-center"></div>
+    </div>
+</div>
+
+<script>
+    async function buscarEstoque() {
+        const q = document.getElementById('busca-estoque').value.trim();
+        const url = q ? '/api/estoque?search=' + encodeURIComponent(q) : '/api/estoque';
+        const r = await fetch(url);
+        const dados = await r.json();
+        const tbody = document.getElementById('estoque-body');
+        const vazio = document.getElementById('estoque-vazio');
+
+        if (dados.length === 0) {
+            tbody.innerHTML = '';
+            vazio.classList.remove('hidden');
+            return;
+        }
+        vazio.classList.add('hidden');
+        tbody.innerHTML = dados.map(p => `
+            <tr class="border-b hover:bg-gray-50">
+                <td class="p-2 font-mono text-xs">${p.ean}</td>
+                <td class="p-2 font-medium">${p.produto || ''}</td>
+                <td class="p-2 text-center font-bold ${p.quantidade_estoque > 0 ? 'text-indigo-600' : 'text-red-500'}">${p.quantidade_estoque || 0}</td>
+                <td class="p-2 text-center text-xs ${p.lote ? 'text-gray-600' : 'text-gray-300'}">${p.lote || '-'}</td>
+                <td class="p-2 text-center text-xs ${p.data_vencimento ? 'text-gray-600' : 'text-gray-300'}">${formatarData(p.data_vencimento) || '-'}</td>
+            </tr>
+        `).join('');
+
+        const total = dados.reduce((s, p) => s + (p.quantidade_estoque || 0), 0);
+        const comEstoque = dados.length;
+        document.getElementById('resumo-estoque').innerHTML = `
+            <div class="bg-indigo-50 rounded-lg p-3">
+                <p class="text-2xl font-bold text-indigo-600">${total}</p>
+                <p class="text-xs text-gray-500">Total unidades</p>
+            </div>
+            <div class="bg-green-50 rounded-lg p-3">
+                <p class="text-2xl font-bold text-green-600">${comEstoque}</p>
+                <p class="text-xs text-gray-500">Produtos em estoque</p>
+            </div>
+            <div class="bg-yellow-50 rounded-lg p-3">
+                <p class="text-2xl font-bold text-yellow-600">${comEstoque > 0 ? (total / comEstoque).toFixed(1) : 0}</p>
+                <p class="text-xs text-gray-500">Média por item</p>
+            </div>
+        `;
+    }
+
+    async function mostrarZerados() {
+        const section = document.getElementById('zerados-section');
+        if (!section.classList.contains('hidden')) {
+            section.classList.add('hidden');
+            return;
+        }
+        section.classList.remove('hidden');
+        const r = await fetch('/api/estoque/zerados');
+        const dados = await r.json();
+        document.getElementById('zerados-body').innerHTML = dados.length === 0
+            ? '<p class="text-gray-400 text-center">Nenhum produto zerado</p>'
+            : dados.map(p => `
+                <div class="flex justify-between items-center p-1 border-b text-xs">
+                    <span class="font-mono">${p.ean}</span>
+                    <span class="flex-1 ml-2">${p.produto || ''}</span>
+                    <span class="text-red-500 font-bold">${p.quantidade_estoque || 0}</span>
+                </div>
+            `).join('');
+    }
+
+    document.getElementById('busca-estoque').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') buscarEstoque();
+    });
+
+    buscarEstoque();
+</script>
+{% endblock %}

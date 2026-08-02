@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Vencimentos - Inventário QR{% endblock %}
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="bg-white rounded-xl shadow-md p-6">
+        <h3 class="font-bold text-lg mb-3 text-red-600"><i class="fas fa-skull-crossbones"></i> Vencidos</h3>
+        <p id="count-vencidos" class="text-sm text-gray-500 mb-2"></p>
+        <div id="tab-vencidos" class="space-y-2 max-h-80 overflow-y-auto text-sm"></div>
+    </div>
+    <div class="bg-white rounded-xl shadow-md p-6">
+        <h3 class="font-bold text-lg mb-3 text-yellow-600"><i class="fas fa-clock"></i> Vencem em 30 Dias</h3>
+        <p id="count-vencendo30" class="text-sm text-gray-500 mb-2"></p>
+        <div id="tab-vencendo30" class="space-y-2 max-h-80 overflow-y-auto text-sm"></div>
+    </div>
+    <div class="bg-white rounded-xl shadow-md p-6">
+        <h3 class="font-bold text-lg mb-3 text-blue-600"><i class="fas fa-calendar-week"></i> Vencem em 31-90 Dias</h3>
+        <p id="count-vencendo90" class="text-sm text-gray-500 mb-2"></p>
+        <div id="tab-vencendo90" class="space-y-2 max-h-80 overflow-y-auto text-sm"></div>
+    </div>
+</div>
+<div class="mt-6 bg-white rounded-xl shadow-md p-6">
+    <h3 class="font-bold text-lg mb-3 text-green-600"><i class="fas fa-check-circle"></i> Dentro da Validade</h3>
+    <p id="count-ok" class="text-sm text-gray-500 mb-2"></p>
+    <div id="tab-ok" class="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-80 overflow-y-auto text-sm"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    async function carregar() {
+        const r = await fetch('/api/vencimentos');
+        const d = await r.json();
+
+        document.getElementById('count-vencidos').textContent = `${d.vencidos.length} produto(s)`;
+        document.getElementById('tab-vencidos').innerHTML = d.vencidos.length
+            ? d.vencidos.map(p => `<div class="bg-red-50 border border-red-200 rounded p-2 flex justify-between"><span><strong>${p.produto}</strong> ${p.marca ? '('+p.marca+')' : ''}</span><span class="text-red-600 font-bold">${formatarData(p.data_vencimento)}</span></div>`).join('')
+            : '<p class="text-gray-400">Nenhum</p>';
+
+        document.getElementById('count-vencendo30').textContent = `${d.vencendo_30.length} produto(s)`;
+        document.getElementById('tab-vencendo30').innerHTML = d.vencendo_30.length
+            ? d.vencendo_30.map(p => `<div class="bg-yellow-50 border border-yellow-200 rounded p-2 flex justify-between"><span><strong>${p.produto}</strong> ${p.marca ? '('+p.marca+')' : ''} <span class="text-xs text-gray-500">Lote: ${p.lote||'-'}</span></span><span class="text-yellow-700">${formatarData(p.data_vencimento)}</span></div>`).join('')
+            : '<p class="text-gray-400">Nenhum</p>';
+
+        document.getElementById('count-vencendo90').textContent = `${d.vencendo_90.length} produto(s)`;
+        document.getElementById('tab-vencendo90').innerHTML = d.vencendo_90.length
+            ? d.vencendo_90.map(p => `<div class="bg-blue-50 border border-blue-200 rounded p-2 flex justify-between"><span><strong>${p.produto}</strong> ${p.marca ? '('+p.marca+')' : ''}</span><span class="text-blue-700">${formatarData(p.data_vencimento)}</span></div>`).join('')
+            : '<p class="text-gray-400">Nenhum</p>';
+
+        document.getElementById('count-ok').textContent = `${d.ok.length} produto(s)`;
+        document.getElementById('tab-ok').innerHTML = d.ok.length
+            ? d.ok.map(p => `<div class="bg-green-50 border border-green-200 rounded p-2 text-xs"><strong>${p.produto}</strong> ${p.lote ? 'Lote: '+p.lote : ''} ${p.data_vencimento ? '- '+formatarData(p.data_vencimento) : ''}</div>`).join('')
+            : '<p class="text-gray-400">Nenhum</p>';
+    }
+    carregar();
+</script>
+{% endblock %}

@@ -1,0 +1,39 @@
+# .env com credenciais (NUNCA commitar)
+.env
+.env.local
+
+# Banco local
+data/
+backups/
+*.db
+*.sqlite
+
+# Uploads / saídas
+uploads/
+exports/qrcodes/
+static/barcodes/
+
+# Certificados locais
+cert.pem
+key.pem
+
+# Logs
+servidor_log.txt
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Excel de origem (grande, dados já importados)
+*.xlsx
+
+# Editor / SO
+.vscode/
+.idea/
+Thumbs.db
+
+# Vercel
+.vercel/

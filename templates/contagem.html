@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Contagem - Inventário QR{% endblock %}
+{% block content %}
+<div class="bg-white rounded-xl shadow-md p-6">
+    <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+        <h2 class="text-2xl font-bold"><i class="fas fa-chart-bar text-purple-600"></i> Relatório de Contagem</h2>
+        <div class="flex flex-wrap items-center gap-2">
+            <select id="select_sessao" class="border rounded-lg px-3 py-2 text-sm" onchange="carregarContagem()">
+                <option value="">Todas as sessões</option>
+            </select>
+            <button onclick="exportarExcel()" class="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 text-sm">
+                <i class="fas fa-file-excel"></i>
+            </button>
+            <button onclick="exportarPDF()" class="bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 text-sm">
+                <i class="fas fa-file-pdf"></i>
+            </button>
+        </div>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="bg-gray-50 text-left">
+                    <th class="px-2 py-2 sortable" onclick="ordenar(0)">EAN</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(1)">Produto</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(2)">Marca</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(3)">Base</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(4)">Lote</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(5)">Vencimento</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(6)">Total</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(7)">Última</th>
+                </tr>
+            </thead>
+            <tbody id="tabela_contagem" class="divide-y"></tbody>
+        </table>
+    </div>
+    <div id="resumo_contagem" class="mt-4 text-sm text-gray-600"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    let contagens = [];
+    let colOrd = 0, ascOrd = true;
+
+    async function carregarSessoes() {
+        const r1 = await fetch('/api/sessoes');
+        const sessoes = await r1.json();
+        const selS = document.getElementById('select_sessao');
+        selS.innerHTML = '<option value="">Todas as sessões</option>' +
+            sessoes.map(s => `<option value="${s.nome}">${s.nome} (${s.status})</option>`).join('');
+    }
+
+    async function carregarContagem() {
+        const sessao = document.getElementById('select_sessao').value;
+        const r = await fetch(`/api/contagem?sessao=${encodeURIComponent(sessao)}`);
+        const data = await r.json();
+        contagens = Array.isArray(data) ? data : [];
+        renderTabela();
+    }
+
+    function renderTabela() {
+        const tbody = document.getElementById('tabela_contagem');
+        if (contagens.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-400">Nenhuma contagem</td></tr>';
+            document.getElementById('resumo_contagem').textContent = '';
+            return;
+        }
+        const keys = ['ean','produto','marca','base_especifica','lote','data_vencimento','total_contado','ultima_leitura'];
+        const sorted = [...contagens].sort((a,b) => {
+            const va = (a[keys[colOrd]]||'').toString().toUpperCase();
+            const vb = (b[keys[colOrd]]||'').toString().toUpperCase();
+            return ascOrd ? va.localeCompare(vb) : vb.localeCompare(va);
+        });
+        const total = sorted.reduce((acc,c) => acc + c.total_contado, 0);
+        tbody.innerHTML = sorted.map(c => `
+            <tr class="hover:bg-gray-50 ${c.data_vencimento && c.data_vencimento < hoje ? 'bg-red-50' : ''}">
+                <td class="px-2 py-2 font-mono text-xs">${c.ean}</td>
+                <td class="px-2 py-2 font-medium">${c.produto}</td>
+                <td class="px-2 py-2 text-gray-600">${c.marca || '-'}</td>
+                <td class="px-2 py-2">${c.base_especifica || '-'}</td>
+                <td class="px-2 py-2 font-mono text-xs">${c.lote || '-'}</td>
+                <td class="px-2 py-2 ${c.data_vencimento && c.data_vencimento < hoje ? 'text-red-600 font-bold' : ''}">${formatarData(c.data_vencimento)}</td>
+                <td class="px-2 py-2 font-bold text-lg text-indigo-700">${c.total_contado}</td>
+                <td class="px-2 py-2 text-xs text-gray-500">${c.ultima_leitura || '-'}</td>
+            </tr>
+        `).join('');
+        document.getElementById('resumo_contagem').textContent = `${sorted.length} itens | ${total} leituras`;
+        document.querySelectorAll('.sortable').forEach((th,i) => {
+            th.classList.toggle('asc', i===colOrd && ascOrd);
+            th.classList.toggle('desc', i===colOrd && !ascOrd);
+        });
+    }
+
+    function ordenar(col) {
+        if (colOrd === col) ascOrd = !ascOrd;
+        else { colOrd = col; ascOrd = true; }
+        renderTabela();
+    }
+
+    function exportarExcel() {
+        const sessao = document.getElementById('select_sessao').value;
+        window.location.href = `/api/exportar/contagem?sessao=${encodeURIComponent(sessao)}`;
+    }
+
+    function exportarPDF() {
+        const sessao = document.getElementById('select_sessao').value;
+        window.open(`/api/relatorio?sessao=${encodeURIComponent(sessao)}`, '_blank');
+    }
+
+    carregarSessoes();
+    carregarContagem();
+</script>
+{% endblock %}

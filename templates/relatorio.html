@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <title>Relatório de Contagem</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; font-size: 12px; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+        th { background: #eee; }
+        h1 { color: #4338ca; }
+        .footer { margin-top: 30px; font-size: 10px; color: #999; }
+    </style>
+</head>
+<body>
+    <h1>Relatório de Contagem</h1>
+    <p>Sessão: {{ sessao }} | Emitido: {{ emitido_em }}</p>
+    <p>Total de itens: {{ contagens|length }} | Total de leituras: {{ total }}</p>
+    <table>
+        <thead>
+            <tr>
+                <th>EAN</th><th>Produto</th><th>Marca</th><th>Base</th><th>Lote</th><th>Vencimento</th><th>Qtd</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in contagens %}
+            <tr>
+                <td>{{ c.ean }}</td>
+                <td>{{ c.produto }}</td>
+                <td>{{ c.marca or '' }}</td>
+                <td>{{ c.base_especifica or '' }}</td>
+                <td>{{ c.lote or '' }}</td>
+                <td>{{ c.data_vencimento or '' }}</td>
+                <td style="text-align:center">{{ c.total_contado }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="footer">Gerado pelo Sistema de Inventário QR</div>
+</body>
+</html>

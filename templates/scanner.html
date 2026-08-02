@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Scanner - Inventário QR{% endblock %}
+{% block content %}
+<div class="bg-white rounded-xl shadow-md p-6">
+    <h2 class="text-2xl font-bold mb-4"><i class="fas fa-qrcode text-blue-600"></i> Modo Scanner</h2>
+    <p class="text-gray-600 mb-4">Aponte o scanner para o código de barras. Campo aceita leitura contínua em modo HID.</p>
+    <div class="bg-gray-100 rounded-lg p-4 mb-4">
+        <div class="flex items-center space-x-2 mb-2">
+            <span id="sessao_display" class="text-sm bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full"></span>
+            <span id="contador" class="text-sm bg-green-100 text-green-800 px-3 py-1 rounded-full">0 leituras</span>
+        </div>
+        <input type="text" id="ean_input" autofocus
+               class="ean-input w-full border-2 border-blue-300 rounded-lg px-4 py-3 focus:border-blue-500 focus:outline-none"
+               placeholder="Leia o código de barras...">
+    </div>
+    <div id="ultimo_resultado" class="mb-4"></div>
+    <div class="border rounded-lg overflow-hidden">
+        <div class="bg-gray-50 px-4 py-2 font-bold text-sm text-gray-600">ÚLTIMAS LEITURAS</div>
+        <div id="historico" class="divide-y max-h-64 overflow-y-auto"></div>
+    </div>
+</div>
+
+<div class="mt-4 bg-white rounded-xl shadow-md p-6">
+    <h3 class="font-bold text-lg mb-2"><i class="fas fa-plus-circle text-green-600"></i> Cadastro Rápido</h3>
+    <p class="text-sm text-gray-500 mb-3">EAN não encontrado? Cadastre na hora:</p>
+    <div id="cadastro_rapido" class="hidden">
+        <div class="grid grid-cols-2 gap-3">
+            <input id="rapido_codigo_interno" placeholder="Código Interno" class="border rounded px-3 py-2">
+            <input id="rapido_produto" placeholder="Produto" class="border rounded px-3 py-2">
+            <input id="rapido_marca" placeholder="Marca" class="border rounded px-3 py-2">
+            <input id="rapido_unidade" placeholder="Unidade (UN)" value="UN" class="border rounded px-3 py-2">
+            <input id="rapido_base" placeholder="Base específica" class="border rounded px-3 py-2">
+            <input id="rapido_lote" placeholder="Lote" class="border rounded px-3 py-2">
+            <input id="rapido_vencimento" type="date" class="border rounded px-3 py-2">
+            <input id="rapido_dosagem" placeholder="Instrução dosagem" class="border rounded px-3 py-2 col-span-2">
+        </div>
+        <button onclick="confirmarCadastroRapido()" class="mt-3 bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">
+            <i class="fas fa-save"></i> Cadastrar e Registrar
+        </button>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    let eanPendente = '';
+    let totalLeituras = 0;
+
+    document.getElementById('ean_input').addEventListener('keydown', async function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const ean = this.value.trim();
+            this.value = '';
+            if (!ean) {
+                document.getElementById('ean_input').focus();
+                return;
+            }
+
+            if (!sessaoAtual) {
+                const nome = 'sessao_' + Date.now();
+                const r = await fetch('/api/sessao', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({nome}) });
+                const data = await r.json();
+                if (data.sucesso) { sessaoAtual = data.sessao; localStorage.setItem('sessao_atual', sessaoAtual); }
+            }
+
+            const r = await fetch(`/api/scanner/${ean}?sessao=${encodeURIComponent(sessaoAtual)}`);
+            const data = await r.json();
+
+            if (data.encontrado) {
+                totalLeituras++;
+                mostrarResultado(data.produto.produto, data.produto.marca, data.vencido ? 'vencido' : 'ok');
+                adicionarHistorico(ean, data.produto.produto, data.vencido ? 'vencido' : 'ok');
+                document.getElementById('cadastro_rapido').classList.add('hidden');
+                if (data.vencido) {
+                    mostrarToast(`PRODUTO VENCIDO! ${data.produto.produto} - ${formatarData(data.produto.data_vencimento)}`, 'erro');
+                }
+            } else {
+                eanPendente = ean;
+                mostrarResultado(`EAN ${ean} não encontrado`, '', 'erro');
+                adicionarHistorico(ean, 'Não cadastrado', 'erro');
+                document.getElementById('cadastro_rapido').classList.remove('hidden');
+                document.getElementById('rapido_codigo_interno').value = '';
+                document.getElementById('rapido_produto').value = '';
+                document.getElementById('rapido_marca').value = '';
+                document.getElementById('rapido_unidade').value = 'UN';
+                document.getElementById('rapido_base').value = '';
+                document.getElementById('rapido_lote').value = '';
+                document.getElementById('rapido_vencimento').value = '';
+                document.getElementById('rapido_dosagem').value = '';
+                document.getElementById('rapido_produto').focus();
+            }
+            atualizarContador();
+            document.getElementById('sessao_display').textContent = `Sessão: ${sessaoAtual}`;
+        }
+    });
+
+    async function confirmarCadastroRapido() {
+        const produto = document.getElementById('rapido_produto').value.trim();
+        if (!produto) return mostrarToast('Nome do produto é obrigatório', 'erro');
+        const r = await fetch('/api/produtos', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+            ean: eanPendente, produto, marca: document.getElementById('rapido_marca').value.trim(),
+            unidade_medida: document.getElementById('rapido_unidade').value.trim() || 'UN',
+            base_especifica: document.getElementById('rapido_base').value.trim(),
+            instrucao_dosagem: document.getElementById('rapido_dosagem').value.trim(),
+            lote: document.getElementById('rapido_lote').value.trim(),
+            data_vencimento: document.getElementById('rapido_vencimento').value,
+            codigo_interno: document.getElementById('rapido_codigo_interno').value.trim(),
+        })});
+        const data = await r.json();
+        if (data.sucesso) {
+            const r2 = await fetch(`/api/scanner/${eanPendente}?sessao=${encodeURIComponent(sessaoAtual)}`);
+            const data2 = await r2.json();
+            if (data2.encontrado) {
+                totalLeituras++; mostrarResultado(data2.produto.produto, data2.produto.marca, 'ok');
+                adicionarHistorico(eanPendente, data2.produto.produto, 'ok');
+                atualizarContador();
+                document.getElementById('cadastro_rapido').classList.add('hidden');
+                document.getElementById('ean_input').focus();
+            }
+        } else mostrarToast(data.msg, 'erro');
+    }
+
+    function mostrarResultado(texto, subtitulo, tipo) {
+        const div = document.getElementById('ultimo_resultado');
+        const styles = { ok: 'flash bg-green-100 border-green-300', vencido: 'flash-error bg-red-100 border-red-400', erro: 'flash-error bg-yellow-100 border-yellow-300' };
+        div.className = `${styles[tipo] || styles.erro} border rounded-lg p-4 mb-4`;
+        const icons = { ok: 'fa-check-circle text-green-600', vencido: 'fa-skull-crossbones text-red-600', erro: 'fa-exclamation-triangle text-yellow-600' };
+        const label = tipo === 'vencido' ? 'VENCIDO! ' : '';
+        div.innerHTML = `<i class="fas ${icons[tipo] || icons.erro}"></i> <strong>${label}${texto}</strong> <span class="text-gray-600">${subtitulo}</span>`;
+    }
+
+    function adicionarHistorico(ean, nome, tipo) {
+        const div = document.getElementById('historico');
+        const cores = { ok: 'text-green-600', vencido: 'text-red-600', erro: 'text-yellow-600' };
+        const icons = { ok: 'fa-check-circle', vencido: 'fa-skull-crossbones', erro: 'fa-exclamation-circle' };
+        const el = document.createElement('div');
+        el.className = 'px-4 py-2 flex justify-between text-sm';
+        el.innerHTML = `<span><i class="fas ${icons[tipo] || icons.erro} ${cores[tipo] || cores.erro}"></i> ${ean}</span><span class="text-gray-600">${nome}</span>`;
+        div.prepend(el);
+        if (div.children.length > 50) div.removeChild(div.lastChild);
+    }
+
+    function atualizarContador() { document.getElementById('contador').textContent = `${totalLeituras} leituras`; }
+    if (sessaoAtual) document.getElementById('sessao_display').textContent = `Sessão: ${sessaoAtual}`;
+</script>
+{% endblock %}

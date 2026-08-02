@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "app.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{uploads/**,data/**,backups/**,exports/**,static/barcodes/**,omie_produtos.xlsx,cert.pem,key.pem,servidor_log.txt}"
+    }
+  }
+}
