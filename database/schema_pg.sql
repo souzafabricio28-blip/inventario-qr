@@ -94,7 +94,17 @@ CREATE TABLE IF NOT EXISTS config (
     valor TEXT DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS usuarios (
+    id BIGSERIAL PRIMARY KEY,
+    usuario TEXT UNIQUE NOT NULL,
+    senha_hash TEXT NOT NULL,
+    nome TEXT DEFAULT '',
+    ativo INTEGER DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_inventario_ean ON inventario_contagem(ean);
 CREATE INDEX IF NOT EXISTS idx_inventario_sessao ON inventario_contagem(sessao);
 CREATE INDEX IF NOT EXISTS idx_produtos_ean ON produtos(ean);
 CREATE INDEX IF NOT EXISTS idx_validacoes_ean ON validacoes_base(ean);
+CREATE INDEX IF NOT EXISTS idx_usuarios_usuario ON usuarios(usuario);

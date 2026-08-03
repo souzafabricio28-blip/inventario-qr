@@ -470,3 +470,56 @@ def registrar_saida(ean, produto, quantidade, lote, data_vencimento, motivo, obs
         _exec(conn, """UPDATE produtos SET quantidade_estoque = GREATEST(0, COALESCE(quantidade_estoque,0) - %s)
             WHERE ean=%s""", (quantidade, ean))
         conn.commit()
+
+
+# ── Usuários ────────────────────────────────────────────────
+
+from werkzeug.security import generate_password_hash, check_password_hash
+
+
+def criar_usuario(usuario, senha, nome=""):
+    with get_db() as conn:
+        try:
+            _exec(conn,
+                "INSERT INTO usuarios (usuario, senha_hash, nome) VALUES (%s, %s, %s)",
+                (usuario.strip().lower(), generate_password_hash(senha), nome.strip()),
+            )
+            conn.commit()
+            return True, "Usuário cadastrado com sucesso"
+        except psycopg2.errors.UniqueViolation:
+            return False, "Usuário já existe"
+
+
+def buscar_usuario(usuario):
+    with get_db() as conn:
+        cur = _exec(conn, "SELECT * FROM usuarios WHERE usuario = %s AND ativo = 1",
+                    (usuario.strip().lower(),))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def verificar_senha(usuario, senha):
+    user = buscar_usuario(usuario)
+    if user and check_password_hash(user["senha_hash"], senha):
+        return user
+    return None
+
+
+def listar_usuarios():
+    with get_db() as conn:
+        cur = _exec(conn, "SELECT id, usuario, nome, ativo, created_at FROM usuarios ORDER BY usuario")
+        return [dict(r) for r in cur.fetchall()]
+
+
+def excluir_usuario(usuario):
+    with get_db() as conn:
+        _exec(conn, "UPDATE usuarios SET ativo = 0 WHERE usuario = %s", (usuario.strip().lower(),))
+        conn.commit()
+
+
+def redefinir_senha(usuario, nova_senha):
+    with get_db() as conn:
+        _exec(conn, "UPDATE usuarios SET senha_hash = %s WHERE usuario = %s AND ativo = 1",
+              (generate_password_hash(nova_senha), usuario.strip().lower()))
+        conn.commit()
+        return True, "Senha redefinida com sucesso"
