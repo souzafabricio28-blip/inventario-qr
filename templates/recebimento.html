@@ -17,63 +17,14 @@
     <div id="tela-upload" class="bg-white rounded-xl shadow-md p-6 mb-4">
         <h2 class="text-xl font-bold mb-3"><i class="fas fa-file-invoice text-indigo-600"></i> Nova NF-e</h2>
 
-        <div class="grid grid-cols-2 gap-3 mb-4">
-            <div class="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center hover:border-indigo-400 cursor-pointer"
-                 onclick="document.getElementById('file-input').click()">
-                <i class="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-1"></i>
-                <p class="text-sm text-gray-500">XML</p>
-                <input type="file" id="file-input" accept=".xml" class="hidden" onchange="enviarXML(event)">
-            </div>
-            <div class="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center hover:border-indigo-400 cursor-pointer"
-                 onclick="mostrarFormManual()">
-                <i class="fas fa-pen text-3xl text-gray-400 mb-1"></i>
-                <p class="text-sm text-gray-500">Manual</p>
-            </div>
+        <div class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-indigo-400 cursor-pointer"
+             onclick="document.getElementById('file-input').click()">
+            <i class="fas fa-cloud-upload-alt text-5xl text-gray-400 mb-2"></i>
+            <p class="text-gray-600 font-bold">Enviar XML da NF-e</p>
+            <p class="text-sm text-gray-400">Clique ou arraste o arquivo XML aqui</p>
+            <input type="file" id="file-input" accept=".xml" class="hidden" onchange="enviarXML(event)">
         </div>
         <div id="upload-status" class="mt-3"></div>
-    </div>
-
-    <!-- NF Manual -->
-    <div id="tela-manual" class="hidden bg-white rounded-xl shadow-md p-6 mb-4">
-        <h2 class="text-xl font-bold mb-3"><i class="fas fa-pen text-indigo-600"></i> NF Manual</h2>
-        <div class="grid grid-cols-2 gap-2 mb-3">
-            <div>
-                <label class="text-xs font-semibold text-gray-500">Número NF</label>
-                <input type="text" id="manual-numero" class="w-full border rounded-lg px-3 py-2 text-sm">
-            </div>
-            <div>
-                <label class="text-xs font-semibold text-gray-500">Série</label>
-                <input type="text" id="manual-serie" value="1" class="w-full border rounded-lg px-3 py-2 text-sm">
-            </div>
-            <div class="col-span-2">
-                <label class="text-xs font-semibold text-gray-500">Fornecedor</label>
-                <input type="text" id="manual-fornecedor" class="w-full border rounded-lg px-3 py-2 text-sm">
-            </div>
-            <div>
-                <label class="text-xs font-semibold text-gray-500">CNPJ</label>
-                <input type="text" id="manual-cnpj" class="w-full border rounded-lg px-3 py-2 text-sm">
-            </div>
-            <div>
-                <label class="text-xs font-semibold text-gray-500">Data Emissão</label>
-                <input type="date" id="manual-data" class="w-full border rounded-lg px-3 py-2 text-sm">
-            </div>
-        </div>
-
-        <h3 class="font-bold text-sm mb-2"><i class="fas fa-list"></i> Itens</h3>
-        <div id="manual-itens" class="space-y-2 mb-3 max-h-60 overflow-y-auto"></div>
-
-        <div class="border-2 border-dashed border-gray-200 rounded-lg p-3 text-center hover:border-indigo-300 cursor-pointer mb-3"
-             onclick="adicionarItemManual()">
-            <i class="fas fa-plus text-gray-400"></i>
-            <span class="text-sm text-gray-500 ml-1">Adicionar Item</span>
-        </div>
-
-        <div class="flex space-x-2">
-            <button onclick="voltarUpload()" class="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-bold text-sm">Voltar</button>
-            <button onclick="salvarNFManual()" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold text-sm">
-                <i class="fas fa-save"></i> Salvar NF
-            </button>
-        </div>
     </div>
 
     <!-- Conferência -->
@@ -209,7 +160,6 @@
         const rec = await r.json();
         document.getElementById('tela-busca').classList.add('hidden');
         document.getElementById('tela-upload').classList.add('hidden');
-        document.getElementById('tela-manual').classList.add('hidden');
         document.getElementById('tela-conferencia').classList.remove('hidden');
         document.getElementById('nf_numero').textContent = `NF ${rec.numero} (Série ${rec.serie || ''})`;
         document.getElementById('nf_fornecedor').textContent = rec.fornecedor || '';
@@ -235,129 +185,6 @@
                 carregarNF(data.recebimento_id);
             })
             .catch(e => document.getElementById('upload-status').innerHTML = `<p class="text-red-600">Erro: ${e.message}</p>`);
-    }
-
-    // ── NF Manual ──
-    let manualItemCount = 0;
-
-    function mostrarFormManual() {
-        document.getElementById('tela-upload').classList.add('hidden');
-        document.getElementById('tela-manual').classList.remove('hidden');
-    }
-
-    function voltarUpload() {
-        document.getElementById('tela-manual').classList.add('hidden');
-        document.getElementById('tela-upload').classList.remove('hidden');
-    }
-
-    function adicionarItemManual(descricao, ean, qtd, lote, venc) {
-        manualItemCount++;
-        const idx = manualItemCount;
-        const div = document.getElementById('manual-itens');
-        const itemDiv = document.createElement('div');
-        itemDiv.id = `manual-item-${idx}`;
-        itemDiv.className = 'bg-gray-50 rounded-lg p-2 text-sm border';
-        itemDiv.innerHTML = `
-            <div class="flex justify-between items-start mb-1">
-                <span class="text-xs font-semibold text-gray-500">Item #${idx}</span>
-                <button onclick="this.closest('.bg-gray-50').remove()" class="text-red-400 hover:text-red-600 text-xs">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="grid grid-cols-2 gap-1">
-                <input name="descricao" placeholder="Descrição" value="${descricao || ''}"
-                       class="border rounded px-2 py-1 text-xs col-span-2">
-                <input name="ean" placeholder="EAN" value="${ean || ''}"
-                       class="border rounded px-2 py-1 text-xs ean-manual">
-                <input name="qtd" placeholder="Qtd" type="number" min="1" value="${qtd || 1}"
-                       class="border rounded px-2 py-1 text-xs">
-                <input name="ncm" placeholder="NCM" class="border rounded px-2 py-1 text-xs">
-                <input name="unidade" placeholder="Un" value="UN"
-                       class="border rounded px-2 py-1 text-xs">
-                <input name="lote" placeholder="Lote" value="${lote || ''}"
-                       class="border rounded px-2 py-1 text-xs lote-manual">
-                <input name="venc" placeholder="Vencimento" type="date" value="${venc || ''}"
-                       class="border rounded px-2 py-1 text-xs venc-manual">
-            </div>
-        `;
-        const eanInput = itemDiv.querySelector('.ean-manual');
-        const descInput = itemDiv.querySelector('input[name="descricao"]');
-        const loteInput = itemDiv.querySelector('.lote-manual');
-        const vencInput = itemDiv.querySelector('.venc-manual');
-        let timer = null;
-        eanInput.addEventListener('input', function() {
-            clearTimeout(timer);
-            const val = this.value.trim();
-            if (val.length < 3) return;
-            timer = setTimeout(async () => {
-                try {
-                    const r = await fetch('/api/produtos/' + encodeURIComponent(val));
-                    if (!r.ok) return;
-                    const p = await r.json();
-                    if (p) {
-                        if (!descInput.value) descInput.value = p.produto || '';
-                        if (p.lote) loteInput.value = p.lote;
-                        if (p.data_vencimento) vencInput.value = p.data_vencimento;
-                    }
-                } catch(e) {}
-            }, 400);
-        });
-        div.appendChild(itemDiv);
-        if (ean) eanInput.dispatchEvent(new Event('input'));
-    }
-
-    async function salvarNFManual() {
-        const numero = document.getElementById('manual-numero').value.trim();
-        if (!numero) {
-            mostrarToast('Informe o número da NF', 'erro');
-            return;
-        }
-
-        const itensDivs = document.querySelectorAll('#manual-itens > div');
-        const itens = [];
-        itensDivs.forEach(div => {
-            const inputs = div.querySelectorAll('input');
-            const descricao = inputs[0].value.trim();
-            if (!descricao) return;
-            itens.push({
-                descricao: descricao,
-                ean: inputs[1].value.trim(),
-                quantidade_esperada: parseFloat(inputs[2].value) || 1,
-                ncm: inputs[3].value.trim(),
-                unidade: inputs[4].value.trim() || 'UN',
-                lote: inputs[5].value.trim(),
-                data_vencimento: inputs[6].value,
-            });
-        });
-
-        if (itens.length === 0) {
-            mostrarToast('Adicione pelo menos um item', 'erro');
-            return;
-        }
-
-        const payload = {
-            numero: numero,
-            serie: document.getElementById('manual-serie').value.trim(),
-            fornecedor: document.getElementById('manual-fornecedor').value.trim(),
-            cnpj_fornecedor: document.getElementById('manual-cnpj').value.trim(),
-            data_emissao: document.getElementById('manual-data').value,
-            itens: itens,
-        };
-
-        const r = await fetch('/api/nfe/criar-manual', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload),
-        });
-        const data = await r.json();
-        if (!data.sucesso) {
-            mostrarToast(data.msg || 'Erro ao salvar', 'erro');
-            return;
-        }
-        mostrarToast('NF criada com sucesso!', 'sucesso');
-        document.getElementById('tela-manual').classList.add('hidden');
-        document.getElementById('tela-upload').classList.remove('hidden');
-        carregarNF(data.recebimento_id);
     }
 
     // ── Conferência ──

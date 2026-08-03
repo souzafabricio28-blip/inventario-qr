@@ -1,9 +1,15 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": {
-    "app.py": {
-      "maxDuration": 60,
-      "excludeFiles": "{uploads/**,data/**,backups/**,exports/**,static/barcodes/**,omie_produtos.xlsx,cert.pem,key.pem,servidor_log.txt}"
+  "version": 2,
+  "builds": [
+    {
+      "src": "app.py",
+      "use": "@vercel/python",
+      "config": {
+        "runtime": "python3.12"
+      }
     }
-  }
+  ],
+  "routes": [
+    { "src": "/^/.*", "dest": "/app.py" }
+  ]
 }

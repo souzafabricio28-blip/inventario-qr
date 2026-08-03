@@ -406,20 +406,6 @@ def pagina_recebimento():
     return render_template("recebimento.html")
 
 
-@app.route("/api/nfe/criar-manual", methods=["POST"])
-@api_handler
-def api_nfe_criar_manual():
-    data = request.get_json()
-    if not data:
-        return jsonify({"sucesso": False, "msg": "Dados inválidos"}), 400
-    rec_id = criar_recebimento_nf(
-        data.get("chave_acesso", ""), data["numero"], data.get("serie", ""),
-        data.get("fornecedor", ""), data.get("cnpj_fornecedor", ""),
-        data.get("data_emissao", ""), data.get("itens", []),
-    )
-    return jsonify({"sucesso": True, "recebimento_id": rec_id})
-
-
 @app.route("/api/nfe/upload", methods=["POST"])
 @api_handler
 def api_nfe_upload():
@@ -533,14 +519,21 @@ def api_restore():
         if os.path.exists(tmp): os.remove(tmp)
         return jsonify({"sucesso": False, "msg": f"Arquivo inválido: {str(e)}"}), 400
 
-# ── QR Conexão iPhone ──────────────────────────────────────
+# ── QR Conexão iPhone / Celular ──────────────────────────────────────
+
+from utils.network import obter_ip_rede
+
+
+def _obter_ip_rede():
+    return obter_ip_rede()
+
 
 @app.route("/api/qr-conexao")
 @api_handler
 def api_qr_conexao():
-    import socket, qrcode, base64
-    hostname = socket.gethostbyname(socket.gethostname())
-    url = f"http://{hostname}:5000/"
+    ipconfig = _obter_ip_rede()
+    url = f"http://{ipconfig}:5000/"
+    import qrcode, base64
     qr = qrcode.make(url)
     buf = io.BytesIO()
     qr.save(buf, format="PNG")
