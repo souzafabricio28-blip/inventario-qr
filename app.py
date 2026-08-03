@@ -10,7 +10,7 @@ except ImportError:
     pass
 
 from flask import (Flask, render_template, request, jsonify, session,
-                   send_file, Response)
+                   send_file, Response, redirect)
 from database.backend import PG_ATIVO
 from database.backend import (
     criar_tabelas, get_db, criar_conexao, DB_PATH,
@@ -27,6 +27,7 @@ from database.import_excel import importar_excel
 from qrcode_gen.generator import gerar_qrcode_base64, gerar_qrcode
 from validation.base_validator import validar_base
 from nfe_parser.parser import parse_nfe_xml
+from database.db_pg import verificar_senha, criar_usuario, listar_usuarios, excluir_usuario, redefinir_senha
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "inventario-qr-secret-key")
@@ -42,6 +43,17 @@ except OSError:
     import tempfile
     app.config["UPLOAD_FOLDER"] = os.path.join(tempfile.gettempdir(), "inventario_uploads")
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
+
+def login_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if "usuario" not in session:
+            if request.path.startswith("/api/"):
+                return jsonify({"sucesso": False, "msg": "Não autenticado"}), 401
+            return redirect("/login")
+        return f(*args, **kwargs)
+    return wrapper
 
 
 def api_handler(f):
@@ -62,14 +74,39 @@ def not_found(e):
     return e
 
 
+# ── Autenticação ────────────────────────────────────────────
+
+@app.route("/login", methods=["GET", "POST"])
+def pagina_login():
+    if request.method == "POST":
+        usuario = request.form.get("usuario", "").strip()
+        senha = request.form.get("senha", "")
+        user = verificar_senha(usuario, senha)
+        if user:
+            session["usuario"] = user["usuario"]
+            session["nome"] = user["nome"]
+            session.permanent = True
+            return redirect("/")
+        return render_template("login.html", erro="Usuário ou senha inválidos")
+    return render_template("login.html")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+
 # ── Dashboard ──────────────────────────────────────────────
 
 @app.route("/")
+@login_required
 def index():
     return render_template("dashboard.html")
 
 
 @app.route("/api/dashboard")
+@login_required
 @api_handler
 def api_dashboard():
     return jsonify(get_dashboard_stats())
@@ -78,12 +115,14 @@ def api_dashboard():
 # ── Produtos ───────────────────────────────────────────────
 
 @app.route("/api/produtos")
+@login_required
 @api_handler
 def api_listar_produtos():
     return jsonify(listar_produtos(request.args.get("search", "")))
 
 
 @app.route("/api/produtos/<ean>")
+@login_required
 @api_handler
 def api_buscar_produto(ean):
     produto = buscar_produto(ean)
@@ -103,6 +142,7 @@ def api_buscar_produto(ean):
 
 
 @app.route("/api/produtos", methods=["POST"])
+@login_required
 @api_handler
 def api_criar_produto():
     data = request.json
@@ -123,6 +163,7 @@ def api_criar_produto():
 
 
 @app.route("/api/produtos/<ean>", methods=["PUT"])
+@login_required
 @api_handler
 def api_atualizar_produto(ean):
     data = request.json
@@ -135,6 +176,7 @@ def api_atualizar_produto(ean):
 
 
 @app.route("/api/produtos/<ean>", methods=["DELETE"])
+@login_required
 @api_handler
 def api_excluir_produto(ean):
     excluir_produto_completo(ean)
@@ -142,12 +184,14 @@ def api_excluir_produto(ean):
 
 
 @app.route("/produtos")
+@login_required
 def pagina_produtos():
     return render_template("produtos.html")
 
 # ── Scanner ────────────────────────────────────────────────
 
 @app.route("/api/scanner/<ean>")
+@login_required
 @api_handler
 def api_scanner_ean(ean):
     sessao = request.args.get("sessao", session.get("sessao_atual", ""))
@@ -165,6 +209,7 @@ def api_scanner_ean(ean):
 
 
 @app.route("/api/scanner/batch", methods=["POST"])
+@login_required
 @api_handler
 def api_scanner_batch():
     data = request.json
@@ -186,23 +231,27 @@ def api_scanner_batch():
 
 
 @app.route("/scanner")
+@login_required
 def pagina_scanner():
     return render_template("scanner.html")
 
 # ── Contagem ───────────────────────────────────────────────
 
 @app.route("/api/contagem")
+@login_required
 @api_handler
 def api_contagem():
     return jsonify(get_contagens(request.args.get("sessao", "")))
 
 
 @app.route("/contagem")
+@login_required
 def pagina_contagem():
     return render_template("contagem.html")
 
 
 @app.route("/api/exportar/contagem")
+@login_required
 @api_handler
 def api_exportar_contagem():
     import openpyxl
@@ -227,6 +276,7 @@ def api_exportar_contagem():
 # ── Validação ──────────────────────────────────────────────
 
 @app.route("/api/validar", methods=["POST"])
+@login_required
 @api_handler
 def api_validar():
     data = request.json
@@ -234,18 +284,21 @@ def api_validar():
 
 
 @app.route("/validacao")
+@login_required
 def pagina_validacao():
     return render_template("validacao.html")
 
 # ── Sessões ────────────────────────────────────────────────
 
 @app.route("/api/sessoes")
+@login_required
 @api_handler
 def api_sessoes():
     return jsonify(listar_sessoes())
 
 
 @app.route("/api/sessao", methods=["POST"])
+@login_required
 @api_handler
 def api_criar_sessao():
     data = request.json
@@ -259,11 +312,13 @@ def api_criar_sessao():
 # ── Importar Excel ─────────────────────────────────────────
 
 @app.route("/importar")
+@login_required
 def pagina_importar():
     return render_template("importar.html")
 
 
 @app.route("/api/importar", methods=["POST"])
+@login_required
 @api_handler
 def api_importar():
     if "file" not in request.files:
@@ -277,18 +332,21 @@ def api_importar():
 # ── Histórico de Validações ─────────────────────────────────
 
 @app.route("/api/validacoes")
+@login_required
 @api_handler
 def api_validacoes():
     return jsonify(listar_validacoes())
 
 
 @app.route("/validacoes")
+@login_required
 def pagina_validacoes():
     return render_template("validacoes.html")
 
 # ── Relatório ──────────────────────────────────────────────
 
 @app.route("/api/relatorio")
+@login_required
 @api_handler
 def api_relatorio():
     sessao = request.args.get("sessao", "")
@@ -304,6 +362,7 @@ def api_relatorio():
 # ── Configurações ──────────────────────────────────────────
 
 @app.route("/api/config", methods=["GET", "POST"])
+@login_required
 @api_handler
 def api_config():
     if request.method == "POST":
@@ -313,24 +372,28 @@ def api_config():
 
 
 @app.route("/configuracoes")
+@login_required
 def pagina_config():
     return render_template("configuracoes.html")
 
 # ── Vencimentos ────────────────────────────────────────────
 
 @app.route("/api/vencimentos")
+@login_required
 @api_handler
 def api_vencimentos():
     return jsonify(get_vencimentos())
 
 
 @app.route("/vencimentos")
+@login_required
 def pagina_vencimentos():
     return render_template("vencimentos.html")
 
 # ── Etiquetas QR ───────────────────────────────────────────
 
 @app.route("/api/etiquetas/<ean>")
+@login_required
 @api_handler
 def api_etiqueta(ean):
     produto = buscar_produto(ean)
@@ -350,6 +413,7 @@ def api_etiqueta(ean):
 
 
 @app.route("/api/etiquetas", methods=["POST"])
+@login_required
 @api_handler
 def api_etiquetas_lote():
     data = request.json
@@ -373,6 +437,7 @@ def api_etiquetas_lote():
 
 
 @app.route("/api/nfe/<int:rec_id>/etiquetas")
+@login_required
 @api_handler
 def api_nfe_etiquetas(rec_id):
     itens = get_etiquetas_nfe(rec_id)
@@ -396,17 +461,20 @@ def api_nfe_etiquetas(rec_id):
 
 
 @app.route("/etiquetas")
+@login_required
 def pagina_etiquetas():
     return render_template("etiquetas.html")
 
 # ── NF-e / Recebimento ─────────────────────────────────────
 
 @app.route("/recebimento")
+@login_required
 def pagina_recebimento():
     return render_template("recebimento.html")
 
 
 @app.route("/api/nfe/upload", methods=["POST"])
+@login_required
 @api_handler
 def api_nfe_upload():
     if "file" not in request.files:
@@ -430,12 +498,14 @@ def api_nfe_upload():
 
 
 @app.route("/api/nfe/listar")
+@login_required
 @api_handler
 def api_nfe_listar():
     return jsonify(listar_recebimentos())
 
 
 @app.route("/api/nfe/<int:rec_id>/excluir", methods=["POST"])
+@login_required
 @api_handler
 def api_nfe_excluir(rec_id):
     excluir_recebimento(rec_id)
@@ -443,6 +513,7 @@ def api_nfe_excluir(rec_id):
 
 
 @app.route("/api/nfe/<int:rec_id>")
+@login_required
 @api_handler
 def api_nfe_detalhe(rec_id):
     rec = get_recebimento(rec_id)
@@ -452,6 +523,7 @@ def api_nfe_detalhe(rec_id):
 
 
 @app.route("/api/nfe/<int:rec_id>/buscar-item/<ean>")
+@login_required
 @api_handler
 def api_nfe_buscar_item(rec_id, ean):
     row = get_item_recebimento(rec_id, ean)
@@ -461,6 +533,7 @@ def api_nfe_buscar_item(rec_id, ean):
 
 
 @app.route("/api/nfe/<int:rec_id>/conferir", methods=["POST"])
+@login_required
 @api_handler
 def api_nfe_conferir(rec_id):
     data = request.json
@@ -476,6 +549,7 @@ def api_nfe_conferir(rec_id):
 
 
 @app.route("/api/nfe/<int:rec_id>/finalizar", methods=["POST"])
+@login_required
 @api_handler
 def api_nfe_finalizar(rec_id):
     resultado = finalizar_recebimento(rec_id)
@@ -485,11 +559,13 @@ def api_nfe_finalizar(rec_id):
 # ── Backup ─────────────────────────────────────────────────
 
 @app.route("/backup")
+@login_required
 def pagina_backup():
     return render_template("backup.html")
 
 
 @app.route("/api/backup")
+@login_required
 @api_handler
 def api_backup():
     if PG_ATIVO:
@@ -499,6 +575,7 @@ def api_backup():
 
 
 @app.route("/api/restore", methods=["POST"])
+@login_required
 @api_handler
 def api_restore():
     if PG_ATIVO:
@@ -529,6 +606,7 @@ def _obter_ip_rede():
 
 
 @app.route("/api/qr-conexao")
+@login_required
 @api_handler
 def api_qr_conexao():
     ipconfig = _obter_ip_rede()
@@ -543,6 +621,7 @@ def api_qr_conexao():
 # ── Test Barcodes ──────────────────────────────────────────
 
 @app.route("/teste-barcodes")
+@login_required
 def teste_barcodes():
     produtos_teste = [
         {"ean": "01405000132", "nome": "FITA CREPE VERDE 48MMX50M", "qtd": 12},
@@ -559,17 +638,20 @@ def teste_barcodes():
 # ── Estoque Atual ───────────────────────────────────────
 
 @app.route("/estoque")
+@login_required
 def pagina_estoque():
     return render_template("estoque.html")
 
 
 @app.route("/api/estoque")
+@login_required
 @api_handler
 def api_estoque():
     return jsonify(listar_estoque(request.args.get("search", "")))
 
 
 @app.route("/api/estoque/zerados")
+@login_required
 @api_handler
 def api_estoque_zerados():
     return jsonify(listar_estoque_zerados())
@@ -577,17 +659,20 @@ def api_estoque_zerados():
 # ── Saída de Estoque ─────────────────────────────────────
 
 @app.route("/saida")
+@login_required
 def pagina_saida():
     return render_template("saida.html")
 
 
 @app.route("/api/saidas", methods=["GET"])
+@login_required
 @api_handler
 def api_listar_saidas():
     return jsonify(listar_saidas())
 
 
 @app.route("/api/saidas", methods=["POST"])
+@login_required
 @api_handler
 def api_registrar_saida():
     data = request.get_json()
@@ -599,6 +684,56 @@ def api_registrar_saida():
         data.get("motivo", ""), data.get("observacao", ""),
     )
     return jsonify({"sucesso": True})
+
+# ── Gerenciamento de Usuários ────────────────────────────────
+
+@app.route("/usuarios")
+@login_required
+def pagina_usuarios():
+    return render_template("usuarios.html")
+
+
+@app.route("/api/usuarios", methods=["GET"])
+@login_required
+@api_handler
+def api_listar_usuarios():
+    return jsonify(listar_usuarios())
+
+
+@app.route("/api/usuarios", methods=["POST"])
+@login_required
+@api_handler
+def api_criar_usuario():
+    data = request.json
+    usuario = data.get("usuario", "").strip()
+    senha = data.get("senha", "")
+    nome = data.get("nome", "")
+    if not usuario or not senha:
+        return jsonify({"sucesso": False, "msg": "Usuário e senha obrigatórios"}), 400
+    sucesso, msg = criar_usuario(usuario, senha, nome)
+    return jsonify({"sucesso": sucesso, "msg": msg})
+
+
+@app.route("/api/usuarios/<usuario>/excluir", methods=["POST"])
+@login_required
+@api_handler
+def api_excluir_usuario(usuario):
+    if usuario == session.get("usuario"):
+        return jsonify({"sucesso": False, "msg": "Não é possível excluir seu próprio usuário"}), 400
+    excluir_usuario(usuario)
+    return jsonify({"sucesso": True})
+
+
+@app.route("/api/usuarios/<usuario>/redefinir-senha", methods=["POST"])
+@login_required
+@api_handler
+def api_redefinir_senha(usuario):
+    data = request.json
+    nova_senha = data.get("nova_senha", "")
+    if not nova_senha:
+        return jsonify({"sucesso": False, "msg": "Nova senha obrigatória"}), 400
+    redefinir_senha(usuario, nova_senha)
+    return jsonify({"sucesso": True, "msg": "Senha redefinida com sucesso"})
 
 # ── Nav ────────────────────────────────────────────────────
 
@@ -621,6 +756,7 @@ NAV_SECTIONS = [
         ("/validacoes", "Histórico", "fa-history"),
         ("/importar", "Importar", "fa-file-excel"),
         ("/backup", "Backup", "fa-database"),
+        ("/usuarios", "Usuários", "fa-users"),
         ("/configuracoes", "Config", "fa-cog"),
     ]),
 ]

@@ -85,6 +85,10 @@
                     <button onclick="toggleKiosk()" class="text-white hover:text-indigo-200 text-sm px-2 hidden sm:inline" title="Modo Kiosk">
                         <i class="fas fa-mobile-alt text-lg"></i>
                     </button>
+                    <span class="text-indigo-200 text-xs hidden sm:inline ml-2">{{ session.get('nome', session.get('usuario', '')) }}</span>
+                    <a href="/logout" class="text-white hover:text-indigo-200 text-sm px-2" title="Sair">
+                        <i class="fas fa-sign-out-alt text-lg"></i>
+                    </a>
                     <!-- Hamburger -->
                     <button onclick="toggleMenu()" class="text-white hover:text-indigo-200 text-sm px-2 sm:hidden" title="Menu">
                         <i class="fas fa-bars text-lg"></i>
