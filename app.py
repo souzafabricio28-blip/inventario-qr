@@ -609,8 +609,12 @@ def _obter_ip_rede():
 @login_required
 @api_handler
 def api_qr_conexao():
-    ipconfig = _obter_ip_rede()
-    url = f"http://{ipconfig}:5000/"
+    vercel_url = os.environ.get("VERCEL_URL", "")
+    if vercel_url:
+        url = f"https://{vercel_url}"
+    else:
+        ipconfig = _obter_ip_rede()
+        url = f"http://{ipconfig}:5000/"
     import qrcode, base64
     qr = qrcode.make(url)
     buf = io.BytesIO()
