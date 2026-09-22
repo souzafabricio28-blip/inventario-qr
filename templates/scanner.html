@@ -288,7 +288,7 @@
             mostrarToast(data.msg || 'Falha ao vincular', 'erro');
             return;
         }
-        mostrarToast('Código vinculado! Contagem +1', 'ok');
+        mostrarToast('Código vinculado! Contagem +1', 'sucesso');
         document.getElementById('vincular_painel').classList.add('hidden');
         document.getElementById('cadastro_rapido').classList.add('hidden');
         if (data.encontrado && data.produto) {
