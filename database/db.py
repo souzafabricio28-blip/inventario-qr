@@ -1,5 +1,6 @@
 from .schema import criar_conexao, get_db
 from datetime import datetime
+import re
 
 
 def listar_produtos(search=""):
@@ -20,12 +21,51 @@ def listar_produtos(search=""):
 
 
 def buscar_produto(ean):
+    """Busca por EAN, código Omie (codigo_interno) ou código sem pontuação."""
+    ean = (ean or "").strip()
+    if not ean:
+        return None
     conn = criar_conexao()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM produtos WHERE ean = ?", (ean,))
+    cursor.execute(
+        "SELECT * FROM produtos WHERE ean = ? OR codigo_interno = ?",
+        (ean, ean),
+    )
+    row = cursor.fetchone()
+    if row:
+        conn.close()
+        return dict(row)
+    limpo = re.sub(r"[^0-9A-Za-z]", "", ean).upper()
+    if limpo:
+        cursor.execute("SELECT * FROM produtos")
+        for r in cursor.fetchall():
+            d = dict(r)
+            for campo in (d.get("ean") or "", d.get("codigo_interno") or ""):
+                if re.sub(r"[^0-9A-Za-z]", "", str(campo)).upper() == limpo:
+                    conn.close()
+                    return d
+    conn.close()
+    return None
+
+
+def qtd_contagem_sessao(ean, sessao=""):
+    conn = criar_conexao()
+    cursor = conn.cursor()
+    if sessao:
+        cursor.execute(
+            "SELECT COALESCE(SUM(quantidade_contada), 0) as qtd "
+            "FROM inventario_contagem WHERE ean = ? AND sessao = ?",
+            (ean, sessao),
+        )
+    else:
+        cursor.execute(
+            "SELECT COALESCE(SUM(quantidade_contada), 0) as qtd "
+            "FROM inventario_contagem WHERE ean = ?",
+            (ean,),
+        )
     row = cursor.fetchone()
     conn.close()
-    return dict(row) if row else None
+    return int(row["qtd"] if hasattr(row, "keys") else row[0])
 
 
 def criar_produto(ean, produto, marca="", unidade_medida="UN",
@@ -95,36 +135,59 @@ def registrar_contagem(ean, quantidade=1, sessao="", lote="", data_vencimento=""
     conn.close()
 
 
-def get_contagens(sessao=""):
+def get_contagens(sessao="", cruzar=False):
+    """Lista contagens. Se cruzar=True, inclui todo o cadastro (Omie) com qtd 0."""
+    cols = (
+        "p.ean, COALESCE(NULLIF(p.codigo_interno, ''), p.ean) as codigo_omie, "
+        "p.codigo_interno, p.produto, p.marca, p.base_especifica, "
+        "p.lote, p.data_vencimento, "
+        "COALESCE(p.quantidade_estoque, 0) as quantidade_estoque, "
+        "COALESCE(SUM(i.quantidade_contada), 0) as total_contado, "
+        "MAX(i.data_hora) as ultima_leitura"
+    )
+    group = (
+        "p.ean, p.codigo_interno, p.produto, p.marca, p.base_especifica, "
+        "p.lote, p.data_vencimento, p.quantidade_estoque"
+    )
     conn = criar_conexao()
     cursor = conn.cursor()
-    if sessao:
+    if cruzar:
+        if sessao:
+            cursor.execute(
+                f"SELECT {cols} FROM produtos p "
+                f"LEFT JOIN inventario_contagem i ON i.ean = p.ean AND i.sessao = ? "
+                f"GROUP BY {group} "
+                f"ORDER BY CASE WHEN COALESCE(SUM(i.quantidade_contada), 0) = 0 THEN 1 ELSE 0 END, p.produto",
+                (sessao,),
+            )
+        else:
+            cursor.execute(
+                f"SELECT {cols} FROM produtos p "
+                f"LEFT JOIN inventario_contagem i ON i.ean = p.ean "
+                f"GROUP BY {group} "
+                f"ORDER BY CASE WHEN COALESCE(SUM(i.quantidade_contada), 0) = 0 THEN 1 ELSE 0 END, p.produto"
+            )
+    elif sessao:
         cursor.execute(
-            """SELECT p.ean, p.produto, p.marca, p.base_especifica,
-                      p.lote, p.data_vencimento,
-                      COUNT(i.id) as total_contado,
-                      MAX(i.data_hora) as ultima_leitura
-               FROM inventario_contagem i
-               JOIN produtos p ON i.ean = p.ean
-               WHERE i.sessao = ?
-               GROUP BY i.ean
-               ORDER BY total_contado DESC""",
+            f"SELECT {cols} FROM inventario_contagem i "
+            f"JOIN produtos p ON i.ean = p.ean "
+            f"WHERE i.sessao = ? "
+            f"GROUP BY {group} ORDER BY total_contado DESC",
             (sessao,),
         )
     else:
         cursor.execute(
-            """SELECT p.ean, p.produto, p.marca, p.base_especifica,
-                      p.lote, p.data_vencimento,
-                      COUNT(i.id) as total_contado,
-                      MAX(i.data_hora) as ultima_leitura
-               FROM inventario_contagem i
-               JOIN produtos p ON i.ean = p.ean
-               GROUP BY i.ean
-               ORDER BY total_contado DESC"""
+            f"SELECT {cols} FROM inventario_contagem i "
+            f"JOIN produtos p ON i.ean = p.ean "
+            f"GROUP BY {group} ORDER BY total_contado DESC"
         )
     rows = cursor.fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    result = [dict(r) for r in rows]
+    for r in result:
+        r["total_contado"] = int(r.get("total_contado") or 0)
+        r["status"] = "contado" if r["total_contado"] > 0 else "pendente"
+    return result
 
 
 def criar_sessao(nome):

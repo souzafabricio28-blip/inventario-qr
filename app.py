@@ -22,11 +22,13 @@ from database.backend import (
     verificar_chave_nfe, get_item_recebimento, conferir_item_recebimento,
     finalizar_recebimento, excluir_recebimento, get_etiquetas_nfe,
     listar_estoque, listar_estoque_zerados, listar_saidas, registrar_saida,
+    qtd_contagem_sessao,
 )
-from database.import_excel import importar_excel
+from database.import_excel import importar_excel, sincronizar_omie
 from qrcode_gen.generator import gerar_qrcode_base64, gerar_qrcode
 from validation.base_validator import validar_base
 from nfe_parser.parser import parse_nfe_xml
+from utils.helpers import parse_codigo_lido
 from database.db_pg import verificar_senha, criar_usuario, listar_usuarios, excluir_usuario, redefinir_senha
 
 app = Flask(__name__)
@@ -190,22 +192,58 @@ def pagina_produtos():
 
 # ── Scanner ────────────────────────────────────────────────
 
-@app.route("/api/scanner/<ean>")
+def _processar_bip(codigo_bruto, sessao):
+    """Cruza código lido com cadastro e registra +1 na contagem da sessão."""
+    parsed = parse_codigo_lido(codigo_bruto)
+    codigo = parsed["ean"] or (codigo_bruto or "").strip()
+    produto = buscar_produto(codigo)
+    if not produto and parsed.get("codigo_interno"):
+        produto = buscar_produto(parsed["codigo_interno"])
+
+    if not produto:
+        return {
+            "encontrado": False,
+            "ean": codigo,
+            "msg": f"EAN/código não cadastrado: {codigo}",
+        }
+
+    ean_real = produto["ean"]
+    lote = parsed.get("lote") or produto.get("lote") or ""
+    venc = parsed.get("data_vencimento") or produto.get("data_vencimento") or ""
+    registrar_contagem(ean_real, quantidade=1, sessao=sessao, lote=lote, data_vencimento=venc)
+    qtd = qtd_contagem_sessao(ean_real, sessao)
+    vencido = bool(venc and str(venc)[:10] < datetime.now().strftime("%Y-%m-%d"))
+    return {
+        "encontrado": True,
+        "produto": produto,
+        "codigo_omie": produto.get("codigo_interno") or ean_real,
+        "qtd_sessao": qtd,
+        "incremento": 1,
+        "lote": lote,
+        "data_vencimento": venc,
+        "vencido": vencido,
+        "msg": f"{produto['produto']} — total {qtd}",
+    }
+
+
+@app.route("/api/scanner/bip", methods=["POST"])
+@login_required
+@api_handler
+def api_scanner_bip():
+    data = request.json or {}
+    sessao = data.get("sessao") or session.get("sessao_atual", "")
+    codigo = data.get("codigo") or data.get("ean") or ""
+    if not str(codigo).strip():
+        return jsonify({"encontrado": False, "msg": "Código vazio"}), 400
+    return jsonify(_processar_bip(codigo, sessao))
+
+
+@app.route("/api/scanner/<path:ean>")
 @login_required
 @api_handler
 def api_scanner_ean(ean):
     sessao = request.args.get("sessao", session.get("sessao_atual", ""))
-    produto = buscar_produto(ean)
-    if produto:
-        registrar_contagem(ean, sessao=sessao)
-        vencido = bool(produto.get("data_vencimento") and
-                       produto["data_vencimento"] < datetime.now().strftime("%Y-%m-%d"))
-        return jsonify({
-            "encontrado": True, "produto": produto,
-            "vencido": vencido,
-            "msg": f"{produto['produto']} ({produto['marca']}) - +1",
-        })
-    return jsonify({"encontrado": False, "msg": "EAN não cadastrado"})
+    return jsonify(_processar_bip(ean, sessao))
 
 
 @app.route("/api/scanner/batch", methods=["POST"])
@@ -219,14 +257,18 @@ def api_scanner_batch():
         sessao = f"leitura_{len(eans)}_{os.urandom(2).hex()}"
         criar_sessao(sessao)
     resultados = []
-    for ean in eans:
-        if not ean.strip(): continue
-        produto = buscar_produto(ean.strip())
-        if produto:
-            registrar_contagem(ean.strip(), sessao=sessao)
-            resultados.append({"ean": ean.strip(), "status": "ok", "produto": produto["produto"]})
+    for raw in eans:
+        if not str(raw).strip():
+            continue
+        res = _processar_bip(str(raw), sessao)
+        if res.get("encontrado"):
+            resultados.append({
+                "ean": res["produto"]["ean"], "status": "ok",
+                "produto": res["produto"]["produto"],
+                "qtd_sessao": res["qtd_sessao"],
+            })
         else:
-            resultados.append({"ean": ean.strip(), "status": "nao_encontrado"})
+            resultados.append({"ean": res.get("ean", ""), "status": "nao_encontrado"})
     return jsonify({"sessao": sessao, "resultados": resultados, "total": len(resultados)})
 
 
@@ -241,7 +283,17 @@ def pagina_scanner():
 @login_required
 @api_handler
 def api_contagem():
-    return jsonify(get_contagens(request.args.get("sessao", "")))
+    sessao = request.args.get("sessao", "")
+    cruzar = request.args.get("cruzar", "1") in ("1", "true", "True", "yes")
+    return jsonify(get_contagens(sessao, cruzar=cruzar))
+
+
+@app.route("/api/omie/sincronizar", methods=["POST"])
+@login_required
+@api_handler
+def api_omie_sincronizar():
+    ok, msg = sincronizar_omie()
+    return jsonify({"sucesso": ok, "msg": msg}), (200 if ok else 400)
 
 
 @app.route("/contagem")
@@ -256,16 +308,21 @@ def pagina_contagem():
 def api_exportar_contagem():
     import openpyxl
     sessao = request.args.get("sessao", "")
-    contagens = get_contagens(sessao)
+    cruzar = request.args.get("cruzar", "1") in ("1", "true", "True", "yes")
+    contagens = get_contagens(sessao, cruzar=cruzar)
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Contagem"
-    ws.append(["EAN", "Produto", "Marca", "Base", "Lote", "Vencimento",
-               "Total Contado", "Ultima Leitura"])
+    ws.append(["Codigo Omie", "EAN", "Produto", "Marca", "Base", "Lote", "Vencimento",
+               "Estoque", "Total Contado", "Status", "Ultima Leitura"])
     for c in contagens:
-        ws.append([c["ean"], c["produto"], c.get("marca",""), c.get("base_especifica",""),
-                   c.get("lote",""), c.get("data_vencimento",""),
-                   c["total_contado"], c.get("ultima_leitura","")])
+        ws.append([
+            c.get("codigo_omie") or c.get("codigo_interno") or c["ean"],
+            c["ean"], c["produto"], c.get("marca", ""), c.get("base_especifica", ""),
+            c.get("lote", ""), c.get("data_vencimento", ""),
+            c.get("quantidade_estoque", 0), c["total_contado"],
+            c.get("status", ""), c.get("ultima_leitura", ""),
+        ])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -350,12 +407,18 @@ def pagina_validacoes():
 @api_handler
 def api_relatorio():
     sessao = request.args.get("sessao", "")
-    contagens = get_contagens(sessao)
+    cruzar = request.args.get("cruzar", "1") in ("1", "true", "True", "yes")
+    contagens = get_contagens(sessao, cruzar=cruzar)
     total = sum(c["total_contado"] for c in contagens)
+    contados = sum(1 for c in contagens if c.get("total_contado", 0) > 0)
+    pendentes = sum(1 for c in contagens if c.get("total_contado", 0) == 0)
     return render_template("relatorio.html",
         sessao=sessao or "Todas",
         contagens=contagens,
         total=total,
+        contados=contados,
+        pendentes=pendentes,
+        cruzar=cruzar,
         emitido_em=datetime.now().strftime("%d/%m/%Y %H:%M"),
     )
 

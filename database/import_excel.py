@@ -1,7 +1,7 @@
 import os
 import re
 from openpyxl import load_workbook
-from .backend import criar_produto
+from .backend import atualizar_produto, criar_produto, listar_produtos
 
 
 COLUNAS_MApeamento = {
@@ -130,3 +130,88 @@ def importar_excel(caminho_arquivo):
 
     except Exception as e:
         return False, f"Erro ao importar: {str(e)}"
+
+
+def _norm_codigo_omie(val):
+    """Normaliza código Omie (ex.: 29912.0 → 29912)."""
+    if val is None:
+        return ""
+    c = str(val).strip()
+    if c.endswith(".0") and c[:-2].replace("-", "").replace(".", "").isdigit():
+        c = c[:-2]
+    return c
+
+
+def sincronizar_omie(caminho_arquivo=None):
+    """
+    Cruza a planilha Omie (codigo + descrição) com a tabela produtos:
+    - preenche codigo_interno com o código Omie
+    - cadastra produtos Omie que ainda não existem (ean = código)
+    """
+    if not caminho_arquivo:
+        raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        candidatos = [
+            os.path.join(raiz, "omie_produtos.xlsx"),
+            os.path.join(os.path.expanduser("~"), "Documents",
+                         "lista de produtos cadastrados no omie.xlsx"),
+        ]
+        caminho_arquivo = next((p for p in candidatos if os.path.exists(p)), None)
+
+    if not caminho_arquivo or not os.path.exists(caminho_arquivo):
+        return False, "Arquivo Omie não encontrado (omie_produtos.xlsx)"
+
+    try:
+        wb = load_workbook(caminho_arquivo, read_only=True, data_only=True)
+        ws = wb.active
+        linhas = list(ws.iter_rows(values_only=True))
+        wb.close()
+    except Exception as e:
+        return False, f"Erro ao ler Omie: {e}"
+
+    if len(linhas) < 2:
+        return False, "Planilha Omie vazia"
+
+    with_prods = listar_produtos()
+    por_ean = {}
+    por_limpo = {}
+    for p in with_prods:
+        ean = str(p["ean"])
+        ci = (p.get("codigo_interno") or "")
+        por_ean[ean] = ci
+        por_limpo[re.sub(r"[^0-9A-Za-z]", "", ean).upper()] = ean
+
+    atualizados = 0
+    criados = 0
+    for linha in linhas[1:]:
+        if not linha or (linha[0] is None and (len(linha) < 2 or not linha[1])):
+            continue
+        codigo = _norm_codigo_omie(linha[0])
+        descricao = str(linha[1] or "").strip() if len(linha) > 1 else ""
+        if not codigo:
+            continue
+
+        ean_alvo = codigo if codigo in por_ean else por_limpo.get(
+            re.sub(r"[^0-9A-Za-z]", "", codigo).upper()
+        )
+
+        if ean_alvo:
+            if (por_ean.get(ean_alvo) or "").strip() != codigo:
+                atualizar_produto(ean_alvo, codigo_interno=codigo)
+                por_ean[ean_alvo] = codigo
+                atualizados += 1
+        else:
+            marca = ""
+            nome = descricao
+            partes = descricao.split(" ", 1)
+            if len(partes) > 1 and len(partes[0]) <= 20:
+                marca, nome = partes[0], partes[1]
+            ok, _ = criar_produto(
+                ean=codigo, produto=nome or codigo, marca=marca,
+                codigo_interno=codigo,
+            )
+            if ok:
+                por_ean[codigo] = codigo
+                por_limpo[re.sub(r"[^0-9A-Za-z]", "", codigo).upper()] = codigo
+                criados += 1
+
+    return True, f"Omie sincronizado: {atualizados} atualizados, {criados} novos"

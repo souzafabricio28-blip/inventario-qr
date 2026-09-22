@@ -9,29 +9,36 @@
         th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
         th { background: #eee; }
         h1 { color: #4338ca; }
+        .pendente { background: #fffbeb; }
         .footer { margin-top: 30px; font-size: 10px; color: #999; }
     </style>
 </head>
 <body>
-    <h1>Relatório de Contagem</h1>
+    <h1>Relatório de Contagem × Omie</h1>
     <p>Sessão: {{ sessao }} | Emitido: {{ emitido_em }}</p>
-    <p>Total de itens: {{ contagens|length }} | Total de leituras: {{ total }}</p>
+    <p>Cadastro: {{ contagens|length }} |
+       Contados: {{ contados }} |
+       Pendentes: {{ pendentes }} |
+       Leituras: {{ total }}</p>
     <table>
         <thead>
             <tr>
-                <th>EAN</th><th>Produto</th><th>Marca</th><th>Base</th><th>Lote</th><th>Vencimento</th><th>Qtd</th>
+                <th>Cód. Omie</th><th>EAN</th><th>Produto</th><th>Marca</th>
+                <th>Lote</th><th>Vencimento</th><th>Estoque</th><th>Contado</th><th>Status</th>
             </tr>
         </thead>
         <tbody>
             {% for c in contagens %}
-            <tr>
+            <tr class="{{ 'pendente' if c.total_contado == 0 else '' }}">
+                <td>{{ c.codigo_omie or c.codigo_interno or c.ean }}</td>
                 <td>{{ c.ean }}</td>
                 <td>{{ c.produto }}</td>
                 <td>{{ c.marca or '' }}</td>
-                <td>{{ c.base_especifica or '' }}</td>
                 <td>{{ c.lote or '' }}</td>
                 <td>{{ c.data_vencimento or '' }}</td>
+                <td style="text-align:center">{{ c.quantidade_estoque or 0 }}</td>
                 <td style="text-align:center">{{ c.total_contado }}</td>
+                <td>{{ c.status }}</td>
             </tr>
             {% endfor %}
         </tbody>

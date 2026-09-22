@@ -14,6 +14,7 @@ if PG_ATIVO:
         finalizar_recebimento, excluir_recebimento, get_etiquetas_nfe,
         listar_estoque, listar_estoque_zerados, listar_saidas, registrar_saida,
         fechar_sessao, registrar_validacao, get_ultima_validacao,
+        qtd_contagem_sessao,
     )
 else:
     from .schema import criar_conexao, criar_tabelas, get_db, get_db_path, DB_PATH
@@ -27,4 +28,5 @@ else:
         finalizar_recebimento, excluir_recebimento, get_etiquetas_nfe,
         listar_estoque, listar_estoque_zerados, listar_saidas, registrar_saida,
         fechar_sessao, registrar_validacao, get_ultima_validacao,
+        qtd_contagem_sessao,
     )

@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from datetime import datetime
 
 
@@ -11,6 +12,46 @@ def formatar_data(dt_str):
         return dt.strftime("%d/%m/%Y %H:%M")
     except (ValueError, TypeError):
         return str(dt_str)
+
+
+def parse_codigo_lido(raw):
+    """
+    Interpreta leitura de barcode/QR.
+    Aceita EAN puro ou QR multi-linha (EAN:, Lote:, Validade:, ID:).
+    """
+    texto = (raw or "").strip()
+    resultado = {
+        "ean": "", "lote": "", "data_vencimento": "",
+        "codigo_interno": "", "bruto": texto,
+    }
+    if not texto:
+        return resultado
+
+    upper = texto.upper()
+    multilinha = "\n" in texto or "EAN:" in upper or "ID:" in upper
+
+    if multilinha:
+        for linha in texto.replace("\r", "").split("\n"):
+            linha = linha.strip()
+            if ":" not in linha:
+                continue
+            chave, _, val = linha.partition(":")
+            chave_n = re.sub(r"\s+", "", chave.strip().lower())
+            val = val.strip()
+            if chave_n == "ean":
+                resultado["ean"] = val
+            elif chave_n == "lote":
+                resultado["lote"] = val
+            elif chave_n in ("validade", "vencimento", "datavencimento"):
+                resultado["data_vencimento"] = val[:10] if val else ""
+            elif chave_n in ("id", "codigo", "codigointerno", "sku"):
+                resultado["codigo_interno"] = val
+        if not resultado["ean"]:
+            resultado["ean"] = resultado["codigo_interno"]
+        return resultado
+
+    resultado["ean"] = texto
+    return resultado
 
 
 def exportar_json(dados, filename="export.json"):
