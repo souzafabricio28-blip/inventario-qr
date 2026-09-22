@@ -25,23 +25,35 @@ def buscar_produto(ean):
     ean = (ean or "").strip()
     if not ean:
         return None
+    candidatos = [ean]
+    if ean.endswith(".0"):
+        candidatos.append(ean[:-2])
+    sem_zeros = ean.lstrip("0")
+    if sem_zeros and sem_zeros != ean:
+        candidatos.append(sem_zeros)
+    limpo = re.sub(r"[^0-9A-Za-z]", "", ean)
+    if limpo and limpo not in candidatos:
+        candidatos.append(limpo)
+
     conn = criar_conexao()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT * FROM produtos WHERE ean = ? OR codigo_interno = ?",
-        (ean, ean),
-    )
-    row = cursor.fetchone()
-    if row:
-        conn.close()
-        return dict(row)
-    limpo = re.sub(r"[^0-9A-Za-z]", "", ean).upper()
-    if limpo:
+    for cod in candidatos:
+        cursor.execute(
+            "SELECT * FROM produtos WHERE ean = ? OR codigo_interno = ?",
+            (cod, cod),
+        )
+        row = cursor.fetchone()
+        if row:
+            conn.close()
+            return dict(row)
+
+    limpo_u = re.sub(r"[^0-9A-Za-z]", "", ean).upper()
+    if limpo_u:
         cursor.execute("SELECT * FROM produtos")
         for r in cursor.fetchall():
             d = dict(r)
             for campo in (d.get("ean") or "", d.get("codigo_interno") or ""):
-                if re.sub(r"[^0-9A-Za-z]", "", str(campo)).upper() == limpo:
+                if re.sub(r"[^0-9A-Za-z]", "", str(campo)).upper() == limpo_u:
                     conn.close()
                     return d
     conn.close()

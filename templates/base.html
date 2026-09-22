@@ -284,7 +284,9 @@
 
         // Service Worker (PWA)
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/static/sw.js').catch(function() {});
+            navigator.serviceWorker.register('/static/sw.js').then(function(reg) {
+                reg.update();
+            }).catch(function() {});
         }
 
         // Keyboard shortcuts

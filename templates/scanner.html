@@ -85,12 +85,25 @@
     async function processarLeitura(ean) {
         if (!(await garantirSessao())) return;
 
-        const r = await fetch('/api/scanner/bip', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ codigo: ean, sessao: sessaoAtual }),
-        });
-        const data = await r.json();
+        let data;
+        try {
+            const r = await fetch('/api/scanner/bip', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                cache: 'no-store',
+                body: JSON.stringify({ codigo: ean, sessao: sessaoAtual }),
+            });
+            data = await r.json();
+            if (!r.ok && !data.encontrado) {
+                mostrarResultadoErro(ean, data.msg || `Erro HTTP ${r.status}`);
+                if (typeof beep === 'function') beep('erro');
+                return;
+            }
+        } catch (err) {
+            mostrarResultadoErro(ean, 'Falha de rede/API: ' + err);
+            if (typeof beep === 'function') beep('erro');
+            return;
+        }
 
         if (data.encontrado) {
             totalLeituras++;
@@ -106,7 +119,7 @@
             atualizarListaLocal(p, data);
         } else {
             eanPendente = data.ean || ean;
-            mostrarResultadoErro(eanPendente);
+            mostrarResultadoErro(eanPendente, data.msg || 'Não cadastrado no Omie/banco');
             if (typeof beep === 'function') beep('erro');
             document.getElementById('cadastro_rapido').classList.remove('hidden');
             document.getElementById('rapido_codigo_interno').value = eanPendente;
@@ -155,14 +168,15 @@
             </div>`;
     }
 
-    function mostrarResultadoErro(ean) {
+    function mostrarResultadoErro(ean, detalhe) {
         const div = document.getElementById('ultimo_resultado');
         div.classList.remove('hidden');
         div.className = 'mb-4 flash-error bg-yellow-50 border-2 border-yellow-400 rounded-xl p-5';
         div.innerHTML = `<i class="fas fa-exclamation-triangle text-yellow-600"></i>
-            <strong>Código não encontrado no cadastro:</strong>
-            <span class="font-mono">${ean}</span>
-            <p class="text-sm text-gray-600 mt-1">Use o cadastro rápido abaixo ou confira o Excel Omie.</p>`;
+            <strong>Código não encontrado no cadastro Omie</strong>
+            <p class="font-mono text-lg mt-2 break-all">${ean}</p>
+            <p class="text-sm text-gray-600 mt-2">${detalhe || ''}</p>
+            <p class="text-sm text-gray-500 mt-1">Confira se o código bipado é o <b>mesmo código Omie</b> (não outro GTIN da embalagem). Ou cadastre abaixo.</p>`;
     }
 
     function atualizarListaLocal(p, data) {

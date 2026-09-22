@@ -31,22 +31,38 @@ def buscar_produto(ean):
     ean = (ean or "").strip()
     if not ean:
         return None
+    candidatos = [ean]
+    # variações comuns de bipagem
+    if ean.endswith(".0"):
+        candidatos.append(ean[:-2])
+    sem_zeros = ean.lstrip("0")
+    if sem_zeros and sem_zeros != ean:
+        candidatos.append(sem_zeros)
+    limpo = re.sub(r"[^0-9A-Za-z]", "", ean)
+    if limpo and limpo not in candidatos:
+        candidatos.append(limpo)
+
     with get_db() as conn:
+        for cod in candidatos:
+            cur = _exec(conn,
+                "SELECT * FROM produtos WHERE ean = %s OR codigo_interno = %s",
+                (cod, cod))
+            row = cur.fetchone()
+            if row:
+                return dict(row)
+
+        limpo_u = re.sub(r"[^0-9A-Za-z]", "", ean).upper()
+        if not limpo_u:
+            return None
         cur = _exec(conn,
-            "SELECT * FROM produtos WHERE ean = %s OR codigo_interno = %s",
-            (ean, ean))
+            "SELECT * FROM produtos WHERE "
+            "regexp_replace(upper(ean), '[^0-9A-Z]', '', 'g') = %s "
+            "OR regexp_replace(upper(COALESCE(codigo_interno,'')), '[^0-9A-Z]', '', 'g') = %s "
+            "LIMIT 1",
+            (limpo_u, limpo_u))
         row = cur.fetchone()
         if row:
             return dict(row)
-        limpo = re.sub(r"[^0-9A-Za-z]", "", ean).upper()
-        if not limpo:
-            return None
-        cur = _exec(conn, "SELECT * FROM produtos")
-        for r in cur.fetchall():
-            d = dict(r)
-            for campo in (d.get("ean") or "", d.get("codigo_interno") or ""):
-                if re.sub(r"[^0-9A-Za-z]", "", str(campo)).upper() == limpo:
-                    return d
     return None
 
 
