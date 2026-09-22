@@ -76,6 +76,14 @@ def criar_tabelas():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS produto_codigos (
+            codigo TEXT PRIMARY KEY,
+            ean_produto TEXT NOT NULL,
+            origem TEXT DEFAULT 'bip',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (ean_produto) REFERENCES produtos(ean) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS inventario_contagem (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ean TEXT NOT NULL,

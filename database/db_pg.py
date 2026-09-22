@@ -27,12 +27,11 @@ def listar_produtos(search=""):
 
 
 def buscar_produto(ean):
-    """Busca por EAN, código Omie (codigo_interno) ou código sem pontuação."""
+    """Busca por EAN, código Omie, alias de barras ou código sem pontuação."""
     ean = (ean or "").strip()
     if not ean:
         return None
     candidatos = [ean]
-    # variações comuns de bipagem
     if ean.endswith(".0"):
         candidatos.append(ean[:-2])
     sem_zeros = ean.lstrip("0")
@@ -51,6 +50,20 @@ def buscar_produto(ean):
             if row:
                 return dict(row)
 
+        for cod in candidatos:
+            try:
+                cur = _exec(conn,
+                    "SELECT p.* FROM produto_codigos c "
+                    "JOIN produtos p ON p.ean = c.ean_produto "
+                    "WHERE c.codigo = %s",
+                    (cod,))
+                row = cur.fetchone()
+                if row:
+                    return dict(row)
+            except Exception:
+                conn.rollback()
+                break
+
         limpo_u = re.sub(r"[^0-9A-Za-z]", "", ean).upper()
         if not limpo_u:
             return None
@@ -64,6 +77,28 @@ def buscar_produto(ean):
         if row:
             return dict(row)
     return None
+
+
+def vincular_codigo(codigo, ean_produto, origem="bip"):
+    """Associa um código de barras (GTIN) a um produto Omie (ean)."""
+    codigo = (codigo or "").strip()
+    ean_produto = (ean_produto or "").strip()
+    if not codigo or not ean_produto:
+        return False, "Código e produto são obrigatórios"
+    with get_db() as conn:
+        cur = _exec(conn, "SELECT ean FROM produtos WHERE ean = %s", (ean_produto,))
+        if not cur.fetchone():
+            return False, "Produto Omie não encontrado"
+        try:
+            _exec(conn,
+                "INSERT INTO produto_codigos (codigo, ean_produto, origem) VALUES (%s, %s, %s) "
+                "ON CONFLICT (codigo) DO UPDATE SET ean_produto = EXCLUDED.ean_produto, origem = EXCLUDED.origem",
+                (codigo, ean_produto, origem))
+            conn.commit()
+            return True, f"Código {codigo} vinculado ao produto {ean_produto}"
+        except Exception as e:
+            conn.rollback()
+            return False, str(e)
 
 
 def qtd_contagem_sessao(ean, sessao=""):

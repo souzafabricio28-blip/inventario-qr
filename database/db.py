@@ -21,7 +21,7 @@ def listar_produtos(search=""):
 
 
 def buscar_produto(ean):
-    """Busca por EAN, código Omie (codigo_interno) ou código sem pontuação."""
+    """Busca por EAN, código Omie, alias de barras ou código sem pontuação."""
     ean = (ean or "").strip()
     if not ean:
         return None
@@ -47,6 +47,20 @@ def buscar_produto(ean):
             conn.close()
             return dict(row)
 
+    for cod in candidatos:
+        try:
+            cursor.execute(
+                "SELECT p.* FROM produto_codigos c "
+                "JOIN produtos p ON p.ean = c.ean_produto WHERE c.codigo = ?",
+                (cod,),
+            )
+            row = cursor.fetchone()
+            if row:
+                conn.close()
+                return dict(row)
+        except Exception:
+            break
+
     limpo_u = re.sub(r"[^0-9A-Za-z]", "", ean).upper()
     if limpo_u:
         cursor.execute("SELECT * FROM produtos")
@@ -58,6 +72,32 @@ def buscar_produto(ean):
                     return d
     conn.close()
     return None
+
+
+def vincular_codigo(codigo, ean_produto, origem="bip"):
+    codigo = (codigo or "").strip()
+    ean_produto = (ean_produto or "").strip()
+    if not codigo or not ean_produto:
+        return False, "Código e produto são obrigatórios"
+    conn = criar_conexao()
+    cursor = conn.cursor()
+    cursor.execute("SELECT ean FROM produtos WHERE ean = ?", (ean_produto,))
+    if not cursor.fetchone():
+        conn.close()
+        return False, "Produto Omie não encontrado"
+    try:
+        cursor.execute(
+            "INSERT INTO produto_codigos (codigo, ean_produto, origem) VALUES (?, ?, ?) "
+            "ON CONFLICT(codigo) DO UPDATE SET ean_produto=excluded.ean_produto, origem=excluded.origem",
+            (codigo, ean_produto, origem),
+        )
+        conn.commit()
+        conn.close()
+        return True, f"Código {codigo} vinculado ao produto {ean_produto}"
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return False, str(e)
 
 
 def qtd_contagem_sessao(ean, sessao=""):

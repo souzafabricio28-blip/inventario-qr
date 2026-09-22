@@ -1,4 +1,4 @@
-const CACHE_NAME = "inventario-qr-v3";
+const CACHE_NAME = "inventario-qr-v4";
 const urlsToCache = [
   "/static/icon-192.png",
   "/static/icon-512.png",

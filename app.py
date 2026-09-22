@@ -22,7 +22,7 @@ from database.backend import (
     verificar_chave_nfe, get_item_recebimento, conferir_item_recebimento,
     finalizar_recebimento, excluir_recebimento, get_etiquetas_nfe,
     listar_estoque, listar_estoque_zerados, listar_saidas, registrar_saida,
-    qtd_contagem_sessao,
+    qtd_contagem_sessao, vincular_codigo,
 )
 from database.import_excel import importar_excel, sincronizar_omie
 from qrcode_gen.generator import gerar_qrcode_base64, gerar_qrcode
@@ -115,6 +115,31 @@ def api_dashboard():
 
 
 # ── Produtos ───────────────────────────────────────────────
+
+@app.route("/api/produtos/vincular-codigo", methods=["POST"])
+@login_required
+@api_handler
+def api_vincular_codigo():
+    data = request.json or {}
+    codigo = (data.get("codigo") or "").strip()
+    ean_produto = (data.get("ean_produto") or data.get("ean") or "").strip()
+    ok, msg = vincular_codigo(codigo, ean_produto, origem="bip")
+    if not ok:
+        return jsonify({"sucesso": False, "msg": msg}), 400
+    # já conta +1 na sessão atual
+    sessao = data.get("sessao") or session.get("sessao_atual", "")
+    produto = buscar_produto(codigo)
+    if produto and sessao:
+        registrar_contagem(produto["ean"], quantidade=1, sessao=sessao)
+        qtd = qtd_contagem_sessao(produto["ean"], sessao)
+        return jsonify({
+            "sucesso": True, "msg": msg, "encontrado": True,
+            "produto": produto,
+            "codigo_omie": produto.get("codigo_interno") or produto["ean"],
+            "qtd_sessao": qtd, "incremento": 1,
+        })
+    return jsonify({"sucesso": True, "msg": msg})
+
 
 @app.route("/api/produtos")
 @login_required

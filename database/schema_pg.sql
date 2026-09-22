@@ -46,6 +46,15 @@ CREATE TABLE IF NOT EXISTS produtos (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS produto_codigos (
+    codigo TEXT PRIMARY KEY,
+    ean_produto TEXT NOT NULL,
+    origem TEXT DEFAULT 'bip',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_produto_codigos_ean
+        FOREIGN KEY (ean_produto) REFERENCES produtos(ean) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS inventario_contagem (
     id BIGSERIAL PRIMARY KEY,
     ean TEXT NOT NULL,

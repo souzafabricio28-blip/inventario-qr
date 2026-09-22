@@ -27,8 +27,19 @@
 </div>
 
 <div class="mt-4 bg-white rounded-xl shadow-md p-6">
+    <h3 class="font-bold text-lg mb-2"><i class="fas fa-link text-indigo-600"></i> Vincular código de barras ao Omie</h3>
+    <p class="text-sm text-gray-500 mb-3">O GTIN da embalagem é diferente do código Omie. Busque o produto e vincule — na próxima bipagem já reconhece.</p>
+    <div id="vincular_painel" class="hidden">
+        <p class="text-sm mb-2">Código bipado: <span id="vincular_codigo" class="font-mono font-bold"></span></p>
+        <input id="vincular_busca" placeholder="Buscar produto Omie (nome ou código)..."
+               class="w-full border rounded-lg px-3 py-2 mb-2" oninput="buscarParaVincular()">
+        <div id="vincular_resultados" class="divide-y border rounded-lg max-h-48 overflow-y-auto mb-3"></div>
+    </div>
+</div>
+
+<div class="mt-4 bg-white rounded-xl shadow-md p-6">
     <h3 class="font-bold text-lg mb-2"><i class="fas fa-plus-circle text-green-600"></i> Cadastro Rápido</h3>
-    <p class="text-sm text-gray-500 mb-3">Código não encontrado no Omie? Cadastre na hora:</p>
+    <p class="text-sm text-gray-500 mb-3">Se o produto não existe nem no Omie, cadastre na hora:</p>
     <div id="cadastro_rapido" class="hidden">
         <div class="grid grid-cols-2 gap-3">
             <input id="rapido_codigo_interno" placeholder="Código Omie / Interno" class="border rounded px-3 py-2">
@@ -113,6 +124,7 @@
             mostrarResultadoProduto(p, data);
             if (typeof beep === 'function') beep(data.vencido ? 'erro' : 'ok');
             document.getElementById('cadastro_rapido').classList.add('hidden');
+            document.getElementById('vincular_painel').classList.add('hidden');
             if (data.vencido) {
                 mostrarToast(`PRODUTO VENCIDO! ${p.produto}`, 'erro');
             }
@@ -121,6 +133,10 @@
             eanPendente = data.ean || ean;
             mostrarResultadoErro(eanPendente, data.msg || 'Não cadastrado no Omie/banco');
             if (typeof beep === 'function') beep('erro');
+            document.getElementById('vincular_painel').classList.remove('hidden');
+            document.getElementById('vincular_codigo').textContent = eanPendente;
+            document.getElementById('vincular_busca').value = '';
+            document.getElementById('vincular_resultados').innerHTML = '';
             document.getElementById('cadastro_rapido').classList.remove('hidden');
             document.getElementById('rapido_codigo_interno').value = eanPendente;
             document.getElementById('rapido_produto').value = '';
@@ -130,7 +146,7 @@
             document.getElementById('rapido_lote').value = '';
             document.getElementById('rapido_vencimento').value = '';
             document.getElementById('rapido_dosagem').value = '';
-            document.getElementById('rapido_produto').focus();
+            document.getElementById('vincular_busca').focus();
             return;
         }
         atualizarContador();
@@ -229,6 +245,61 @@
         document.getElementById('itens_unicos').textContent = `${lista.length} itens`;
         totalLeituras = lista.reduce((a,c) => a + (c.total_contado||0), 0);
         atualizarContador();
+    }
+
+    let buscaTimer = null;
+    async function buscarParaVincular() {
+        clearTimeout(buscaTimer);
+        buscaTimer = setTimeout(async () => {
+            const q = document.getElementById('vincular_busca').value.trim();
+            const box = document.getElementById('vincular_resultados');
+            if (q.length < 2) { box.innerHTML = ''; return; }
+            const r = await fetch('/api/produtos?search=' + encodeURIComponent(q), { cache: 'no-store' });
+            const lista = await r.json();
+            const itens = Array.isArray(lista) ? lista.slice(0, 15) : [];
+            if (!itens.length) {
+                box.innerHTML = '<div class="px-3 py-2 text-sm text-gray-400">Nenhum produto Omie encontrado</div>';
+                return;
+            }
+            box.innerHTML = itens.map(p => `
+                <button type="button" class="w-full text-left px-3 py-2 hover:bg-indigo-50"
+                    onclick='vincularAgora(${JSON.stringify(p.ean)})'>
+                    <div class="font-medium text-sm">${p.produto}</div>
+                    <div class="text-xs text-gray-500 font-mono">Omie ${p.codigo_interno || p.ean} · ${p.marca || ''}</div>
+                </button>
+            `).join('');
+        }, 250);
+    }
+
+    async function vincularAgora(eanProduto) {
+        if (!eanPendente) return;
+        const r = await fetch('/api/produtos/vincular-codigo', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            cache: 'no-store',
+            body: JSON.stringify({
+                codigo: eanPendente,
+                ean_produto: eanProduto,
+                sessao: sessaoAtual,
+            }),
+        });
+        const data = await r.json();
+        if (!data.sucesso) {
+            mostrarToast(data.msg || 'Falha ao vincular', 'erro');
+            return;
+        }
+        mostrarToast('Código vinculado! Contagem +1', 'ok');
+        document.getElementById('vincular_painel').classList.add('hidden');
+        document.getElementById('cadastro_rapido').classList.add('hidden');
+        if (data.encontrado && data.produto) {
+            totalLeituras++;
+            qtyPorEan[data.produto.ean] = data.qtd_sessao;
+            mostrarResultadoProduto(data.produto, data);
+            atualizarListaLocal(data.produto, data);
+            atualizarContador();
+            if (typeof beep === 'function') beep('ok');
+        }
+        document.getElementById('ean_input').focus();
     }
 
     async function confirmarCadastroRapido() {
