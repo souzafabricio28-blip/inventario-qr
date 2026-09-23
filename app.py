@@ -1046,9 +1046,12 @@ def api_qr_conexao():
         ipconfig = _obter_ip_rede()
         url = f"http://{ipconfig}:5000/"
     import qrcode, base64
-    qr = qrcode.make(url)
+    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=12, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
     buf = io.BytesIO()
-    qr.save(buf, format="PNG")
+    img.save(buf, format="PNG")
     b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
     return jsonify({"url": url, "qrcode": f"data:image/png;base64,{b64}"})
 
