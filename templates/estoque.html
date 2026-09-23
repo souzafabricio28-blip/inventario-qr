@@ -5,11 +5,16 @@
     <div class="bg-white rounded-xl shadow-md p-6 mb-4">
         <h2 class="text-xl font-bold mb-3"><i class="fas fa-warehouse text-indigo-600"></i> Estoque Atual</h2>
 
-        <div class="flex space-x-2 mb-4">
+        <div class="flex flex-wrap gap-2 mb-4">
             <input type="text" id="busca-estoque" placeholder="Buscar por EAN ou produto..."
-                   class="flex-1 border rounded-lg px-4 py-2">
+                   class="flex-1 min-w-[12rem] border rounded-lg px-4 py-2">
             <button onclick="buscarEstoque()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg"><i class="fas fa-search"></i></button>
             <button onclick="mostrarZerados()" class="bg-gray-200 text-gray-600 px-3 py-2 rounded-lg text-sm font-medium">Zerados</button>
+            <button type="button" onclick="zerarEstoque()"
+                    class="bg-rose-700 text-white px-3 py-2 rounded-lg text-sm font-semibold hover:bg-rose-800"
+                    title="Coloca quantidade de todos os produtos em 0">
+                <i class="fas fa-eraser"></i> Zerar estoque
+            </button>
         </div>
 
         <div class="overflow-x-auto">
@@ -104,6 +109,33 @@
                     <span class="text-red-500 font-bold">${p.quantidade_estoque || 0}</span>
                 </div>
             `).join('');
+    }
+
+    async function zerarEstoque() {
+        if (!confirm(
+            'ZERAR o estoque de TODOS os produtos?\n\n' +
+            'Todas as quantidades passam a 0.\n' +
+            'Contagens de inventário NÃO são apagadas.'
+        )) return;
+        const limparLote = confirm(
+            'Também limpar lote e validade?\n\n' +
+            'OK = sim\nCancelar = só zerar quantidade'
+        );
+        try {
+            const r = await fetch('/api/estoque/zerar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ limpar_lote: limparLote }),
+            });
+            const data = await r.json();
+            alert(data.msg || (data.sucesso ? 'OK' : 'Erro'));
+            if (data.sucesso) {
+                document.getElementById('zerados-section').classList.add('hidden');
+                await buscarEstoque();
+            }
+        } catch (e) {
+            alert('Falha ao zerar estoque: ' + e);
+        }
     }
 
     document.getElementById('busca-estoque').addEventListener('keydown', function(e) {

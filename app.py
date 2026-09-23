@@ -23,6 +23,7 @@ from database.backend import (
     verificar_chave_nfe, get_item_recebimento, conferir_item_recebimento,
     finalizar_recebimento, excluir_recebimento, get_etiquetas_nfe,
     listar_estoque, listar_estoque_zerados, listar_saidas, registrar_saida,
+    zerar_estoque_geral,
     qtd_contagem_sessao, vincular_codigo,
     definir_contagem_sessao, excluir_contagem_sessao,
     aplicar_contagem_como_estoque, zerar_contagens,
@@ -1088,6 +1089,22 @@ def api_estoque():
 @api_handler
 def api_estoque_zerados():
     return jsonify(listar_estoque_zerados())
+
+
+@app.route("/api/estoque/zerar", methods=["POST"])
+@login_required
+@api_handler
+def api_zerar_estoque():
+    """Zera o estoque geral de todos os produtos."""
+    data = request.json or {}
+    limpar_lote = bool(data.get("limpar_lote"))
+    ok, afetados = zerar_estoque_geral(limpar_lote=limpar_lote)
+    extra = " (lote/validade limpos)" if limpar_lote else ""
+    return jsonify({
+        "sucesso": ok,
+        "afetados": afetados,
+        "msg": f"Estoque zerado: {afetados} produto(s) atualizado(s){extra}.",
+    })
 
 # ── Saída de Estoque ─────────────────────────────────────
 

@@ -713,6 +713,28 @@ def listar_estoque_zerados():
         return [dict(r) for r in rows]
 
 
+def zerar_estoque_geral(limpar_lote=False):
+    """Zera quantidade_estoque de todos os produtos. Retorna (ok, qtd_afetados)."""
+    with get_db() as conn:
+        if limpar_lote:
+            cur = _exec(conn, """
+                UPDATE produtos SET
+                   quantidade_estoque = 0,
+                   lote = '',
+                   data_vencimento = '',
+                   updated_at = CURRENT_TIMESTAMP
+                WHERE COALESCE(quantidade_estoque, 0) <> 0
+                   OR COALESCE(lote, '') <> ''
+                   OR COALESCE(data_vencimento, '') <> ''""")
+        else:
+            cur = _exec(conn, """
+                UPDATE produtos SET quantidade_estoque = 0, updated_at = CURRENT_TIMESTAMP
+                WHERE COALESCE(quantidade_estoque, 0) <> 0""")
+        afetados = cur.rowcount or 0
+        conn.commit()
+    return True, afetados
+
+
 def listar_saidas():
     with get_db() as conn:
         rows = _exec(conn, """SELECT s.*, p.produto as produto_nome

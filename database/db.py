@@ -800,6 +800,30 @@ def listar_estoque_zerados():
         return [dict(r) for r in rows]
 
 
+def zerar_estoque_geral(limpar_lote=False):
+    """Zera quantidade_estoque de todos os produtos. Retorna (ok, qtd_afetados)."""
+    conn = criar_conexao()
+    cursor = conn.cursor()
+    if limpar_lote:
+        cursor.execute("""
+            UPDATE produtos SET
+               quantidade_estoque = 0,
+               lote = '',
+               data_vencimento = '',
+               updated_at = CURRENT_TIMESTAMP
+            WHERE COALESCE(quantidade_estoque, 0) <> 0
+               OR COALESCE(lote, '') <> ''
+               OR COALESCE(data_vencimento, '') <> ''""")
+    else:
+        cursor.execute("""
+            UPDATE produtos SET quantidade_estoque = 0, updated_at = CURRENT_TIMESTAMP
+            WHERE COALESCE(quantidade_estoque, 0) <> 0""")
+    afetados = cursor.rowcount or 0
+    conn.commit()
+    conn.close()
+    return True, afetados
+
+
 # ── Saídas ─────────────────────────────────────────────────
 
 def listar_saidas():
