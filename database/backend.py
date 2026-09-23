@@ -9,7 +9,8 @@ if PG_ATIVO:
         buscar_produto as _buscar_produto_db,
         criar_produto, atualizar_produto,
         registrar_contagem, get_contagens, criar_sessao, listar_sessoes,
-        excluir_produto_completo, get_dashboard_stats, listar_validacoes,
+        excluir_produto_completo, get_dashboard_stats as _get_dashboard_stats_db,
+        listar_validacoes,
         get_all_config, save_config, get_vencimentos,
         listar_recebimentos, get_recebimento, criar_recebimento_nf,
         verificar_chave_nfe, get_item_recebimento, conferir_item_recebimento,
@@ -27,7 +28,8 @@ else:
         buscar_produto as _buscar_produto_db,
         criar_produto, atualizar_produto,
         registrar_contagem, get_contagens, criar_sessao, listar_sessoes,
-        excluir_produto_completo, get_dashboard_stats, listar_validacoes,
+        excluir_produto_completo, get_dashboard_stats as _get_dashboard_stats_db,
+        listar_validacoes,
         get_all_config, save_config, get_vencimentos,
         listar_recebimentos, get_recebimento, criar_recebimento_nf,
         verificar_chave_nfe, get_item_recebimento, conferir_item_recebimento,
@@ -106,6 +108,22 @@ def listar_produtos(search=""):
     if ok and (st.get("total") or 0) > 0:
         return listar_como_produtos(search)
     return _listar_produtos_db(search)
+
+
+def get_dashboard_stats():
+    """Dashboard: total de produtos = lista RT oficial (não o banco legado)."""
+    from .rt_lista import carregar_lista_rt, status_lista_rt
+
+    stats = _get_dashboard_stats_db()
+    ok, _ = carregar_lista_rt(force=False)
+    st = status_lista_rt()
+    total_rt = int(st.get("total") or 0) if ok else 0
+    if total_rt > 0:
+        stats["total_produtos"] = total_rt
+        stats["fonte_produtos"] = "rt_oficial"
+    else:
+        stats["fonte_produtos"] = "banco"
+    return stats
 
 
 def buscar_produto(ean):
