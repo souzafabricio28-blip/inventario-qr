@@ -357,17 +357,63 @@ def criar_sessao(nome):
     return sessao_id
 
 
-def fechar_sessao(sessao_id):
+def fechar_sessao(sessao_id=None, nome=None):
+    """Encerra sessão por id ou por nome. Retorna True se alguma linha foi atualizada."""
+    conn = criar_conexao()
+    cursor = conn.cursor()
+    if nome:
+        cursor.execute(
+            """UPDATE sessoes_inventario
+               SET status = 'fechada', data_fechamento = CURRENT_TIMESTAMP
+               WHERE nome = ? AND status = 'aberta'""",
+            (nome,),
+        )
+    elif sessao_id is not None:
+        cursor.execute(
+            """UPDATE sessoes_inventario
+               SET status = 'fechada', data_fechamento = CURRENT_TIMESTAMP
+               WHERE id = ? AND status = 'aberta'""",
+            (sessao_id,),
+        )
+    else:
+        conn.close()
+        return False
+    alteradas = cursor.rowcount or 0
+    conn.commit()
+    conn.close()
+    return alteradas > 0
+
+
+def fechar_sessoes_abertas():
+    """Encerra todas as sessões com status aberta. Retorna quantidade encerrada."""
     conn = criar_conexao()
     cursor = conn.cursor()
     cursor.execute(
         """UPDATE sessoes_inventario
            SET status = 'fechada', data_fechamento = CURRENT_TIMESTAMP
-           WHERE id = ?""",
-        (sessao_id,),
+           WHERE status = 'aberta'"""
     )
+    alteradas = cursor.rowcount or 0
     conn.commit()
     conn.close()
+    return alteradas
+
+
+def sessao_esta_aberta(nome):
+    """True se a sessão existe e está aberta. Sessão vazia = livre (sem bloqueio)."""
+    if not (nome or "").strip():
+        return True
+    conn = criar_conexao()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT status FROM sessoes_inventario WHERE nome = ? LIMIT 1",
+        (nome.strip(),),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return True
+    return row["status"] == "aberta"
 
 
 def listar_sessoes():

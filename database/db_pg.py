@@ -320,14 +320,50 @@ def criar_sessao(nome):
         return cur.fetchone()["id"]
 
 
-def fechar_sessao(sessao_id):
+def fechar_sessao(sessao_id=None, nome=None):
+    """Encerra sessão por id ou por nome. Retorna True se alguma linha foi atualizada."""
     with get_db() as conn:
-        _exec(conn,
+        if nome:
+            cur = _exec(conn,
+                """UPDATE sessoes_inventario
+                   SET status = 'fechada', data_fechamento = CURRENT_TIMESTAMP
+                   WHERE nome = %s AND status = 'aberta'""",
+                (nome,))
+        elif sessao_id is not None:
+            cur = _exec(conn,
+                """UPDATE sessoes_inventario
+                   SET status = 'fechada', data_fechamento = CURRENT_TIMESTAMP
+                   WHERE id = %s AND status = 'aberta'""",
+                (sessao_id,))
+        else:
+            return False
+        conn.commit()
+        return (cur.rowcount or 0) > 0
+
+
+def fechar_sessoes_abertas():
+    """Encerra todas as sessões com status aberta. Retorna quantidade encerrada."""
+    with get_db() as conn:
+        cur = _exec(conn,
             """UPDATE sessoes_inventario
                SET status = 'fechada', data_fechamento = CURRENT_TIMESTAMP
-               WHERE id = %s""",
-            (sessao_id,))
+               WHERE status = 'aberta'""")
         conn.commit()
+        return cur.rowcount or 0
+
+
+def sessao_esta_aberta(nome):
+    """True se a sessão existe e está aberta. Sessão vazia = livre (sem bloqueio)."""
+    if not (nome or "").strip():
+        return True
+    with get_db() as conn:
+        cur = _exec(conn,
+            "SELECT status FROM sessoes_inventario WHERE nome = %s LIMIT 1",
+            (nome.strip(),))
+        row = cur.fetchone()
+    if not row:
+        return True  # sessão ainda não registrada formalmente
+    return (row["status"] if isinstance(row, dict) else row[0]) == "aberta"
 
 
 def listar_sessoes():

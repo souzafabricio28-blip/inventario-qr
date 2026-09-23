@@ -16,6 +16,7 @@ from database.backend import (
     criar_tabelas, get_db, criar_conexao, DB_PATH,
     listar_produtos, buscar_produto, criar_produto, atualizar_produto,
     registrar_contagem, get_contagens, criar_sessao, listar_sessoes,
+    fechar_sessao, fechar_sessoes_abertas, sessao_esta_aberta,
     excluir_produto_completo, get_dashboard_stats, listar_validacoes,
     get_all_config, save_config, get_vencimentos,
     listar_recebimentos, get_recebimento, criar_recebimento_nf,
@@ -278,6 +279,13 @@ def _processar_bip(codigo_bruto, sessao):
     """Cruza código lido com planilha RT (ean + codigo_omie) e soma na sessão."""
     from database.rt_lista import resolver_na_planilha, carregar_lista_rt
 
+    if sessao and not sessao_esta_aberta(sessao):
+        return {
+            "encontrado": False,
+            "ean": (codigo_bruto or "").strip(),
+            "msg": f'Sessão "{sessao}" está encerrada. Crie ou selecione uma sessão aberta.',
+        }
+
     parsed = parse_codigo_lido(codigo_bruto)
     codigo = parsed["ean"] or (codigo_bruto or "").strip()
 
@@ -459,6 +467,8 @@ def api_definir_contagem_item():
     ean = (data.get("ean") or "").strip()
     sessao = (data.get("sessao") or session.get("sessao_atual") or "").strip()
     quantidade = data.get("quantidade")
+    if sessao and not sessao_esta_aberta(sessao):
+        return jsonify({"sucesso": False, "msg": f'Sessão "{sessao}" está encerrada.'}), 400
     ok, result = definir_contagem_sessao(
         ean, quantidade, sessao,
         lote=data.get("lote") or "",
@@ -672,6 +682,32 @@ def api_criar_sessao():
     criar_sessao(nome)
     session["sessao_atual"] = nome
     return jsonify({"sucesso": True, "sessao": nome})
+
+
+@app.route("/api/sessao/fechar", methods=["POST"])
+@login_required
+@api_handler
+def api_fechar_sessao():
+    data = request.json or {}
+    todas = bool(data.get("todas"))
+    nome = (data.get("nome") or data.get("sessao") or "").strip()
+
+    if todas or not nome:
+        n = fechar_sessoes_abertas()
+        if session.get("sessao_atual"):
+            session.pop("sessao_atual", None)
+        return jsonify({
+            "sucesso": True,
+            "msg": f"{n} sessão(ões) encerrada(s)." if n else "Nenhuma sessão aberta.",
+            "encerradas": n,
+        })
+
+    ok = fechar_sessao(nome=nome)
+    if ok and session.get("sessao_atual") == nome:
+        session.pop("sessao_atual", None)
+    if not ok:
+        return jsonify({"sucesso": False, "msg": f'Sessão "{nome}" não encontrada ou já fechada.'}), 400
+    return jsonify({"sucesso": True, "msg": f'Sessão "{nome}" encerrada.', "sessao": nome})
 
 # ── Importar Excel ─────────────────────────────────────────
 

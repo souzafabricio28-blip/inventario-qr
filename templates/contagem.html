@@ -5,9 +5,14 @@
     <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
         <h2 class="text-2xl font-bold"><i class="fas fa-chart-bar text-purple-600"></i> Contagem × Estoque</h2>
         <div class="flex flex-wrap items-center gap-2">
-            <select id="select_sessao" class="border rounded-lg px-3 py-2 text-sm" onchange="carregarContagem()">
+            <select id="select_sessao" class="border rounded-lg px-3 py-2 text-sm" onchange="onSessaoChange()">
                 <option value="">Todas as sessões</option>
             </select>
+            <button type="button" id="btn_encerrar_sessao" onclick="encerrarSessao()"
+                    class="bg-amber-600 text-white px-3 py-2 rounded-lg hover:bg-amber-700 text-sm font-semibold"
+                    title="Encerra a sessão selecionada (ou todas as abertas)">
+                <i class="fas fa-lock"></i> Encerrar
+            </button>
             <label class="flex items-center gap-2 text-sm border rounded-lg px-3 py-2 cursor-pointer">
                 <input type="checkbox" id="chk_cruzar" checked onchange="carregarContagem()">
                 Cruzar cadastro RT
@@ -57,12 +62,90 @@
     let contagens = [];
     let colOrd = 2, ascOrd = true;
 
+    let mapaSessoes = {};
+
     async function carregarSessoes() {
         const r1 = await fetch('/api/sessoes');
         const sessoes = await r1.json();
+        mapaSessoes = {};
+        (sessoes || []).forEach(s => { mapaSessoes[s.nome] = s; });
         const selS = document.getElementById('select_sessao');
+        const atual = selS.value;
         selS.innerHTML = '<option value="">Todas as sessões</option>' +
             sessoes.map(s => `<option value="${s.nome}">${s.nome} (${s.status})</option>`).join('');
+        if (atual && mapaSessoes[atual]) selS.value = atual;
+        atualizarBotaoEncerrar();
+    }
+
+    function onSessaoChange() {
+        atualizarBotaoEncerrar();
+        carregarContagem();
+    }
+
+    function atualizarBotaoEncerrar() {
+        const btn = document.getElementById('btn_encerrar_sessao');
+        const sessao = document.getElementById('select_sessao').value;
+        const abertas = Object.values(mapaSessoes).filter(s => s.status === 'aberta');
+        if (!sessao) {
+            btn.disabled = abertas.length === 0;
+            btn.title = abertas.length
+                ? `Encerrar todas as ${abertas.length} sessão(ões) aberta(s)`
+                : 'Nenhuma sessão aberta';
+            btn.innerHTML = `<i class="fas fa-lock"></i> Encerrar${abertas.length ? ' todas' : ''}`;
+            return;
+        }
+        const st = (mapaSessoes[sessao] || {}).status;
+        btn.disabled = st !== 'aberta';
+        btn.title = st === 'aberta' ? `Encerrar sessão "${sessao}"` : 'Sessão já fechada';
+        btn.innerHTML = '<i class="fas fa-lock"></i> Encerrar';
+    }
+
+    async function encerrarSessao() {
+        const sessao = document.getElementById('select_sessao').value;
+        if (!sessao) {
+            const abertas = Object.values(mapaSessoes).filter(s => s.status === 'aberta');
+            if (!abertas.length) return alert('Nenhuma sessão aberta.');
+            const nomes = abertas.map(s => s.nome).join('\n• ');
+            if (!confirm(
+                `Encerrar TODAS as ${abertas.length} sessão(ões) aberta(s)?\n\n• ${nomes}\n\n` +
+                'Os contados ficam salvos; só impede novos bips nessas sessões.'
+            )) return;
+            try {
+                const r = await fetch('/api/sessao/fechar', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ todas: true }),
+                });
+                const data = await r.json();
+                alert(data.msg || (data.sucesso ? 'OK' : 'Erro'));
+                if (data.sucesso) {
+                    await carregarSessoes();
+                    await carregarContagem();
+                }
+            } catch (e) {
+                alert('Falha ao encerrar: ' + e);
+            }
+            return;
+        }
+        if (!confirm(
+            `Encerrar a sessão "${sessao}"?\n\n` +
+            'Os contados ficam salvos; só impede novos bips nesta sessão.'
+        )) return;
+        try {
+            const r = await fetch('/api/sessao/fechar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ nome: sessao }),
+            });
+            const data = await r.json();
+            alert(data.msg || (data.sucesso ? 'OK' : 'Erro'));
+            if (data.sucesso) {
+                await carregarSessoes();
+                await carregarContagem();
+            }
+        } catch (e) {
+            alert('Falha ao encerrar: ' + e);
+        }
     }
 
     async function carregarContagem() {
