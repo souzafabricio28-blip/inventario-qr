@@ -194,8 +194,26 @@
         window.open(`/api/relatorio?sessao=${encodeURIComponent(sessaoAtual)}&cruzar=0`, '_blank');
     }
 
-    async function processarLeitura(ean) {
+    async function processarLeitura(ean, opts) {
+        opts = opts || {};
         if (!(await garantirSessao())) return;
+
+        // Feedback imediato na câmera (não espera rede)
+        if (opts.rapido) {
+            totalLeituras++;
+            qtyPorEan[ean] = (qtyPorEan[ean] || 0) + 1;
+            atualizarContador();
+            const div = document.getElementById('ultimo_resultado');
+            if (div) {
+                div.classList.remove('hidden');
+                div.className = 'mb-4 border-2 rounded-xl p-4 flash bg-green-50 border-green-400';
+                div.innerHTML = `<div class="flex justify-between items-center gap-3">
+                    <div><p class="text-xs text-gray-500">Lido</p>
+                    <p class="font-mono font-bold text-lg">${ean}</p></div>
+                    <p class="text-4xl font-black text-indigo-700">${qtyPorEan[ean]}</p>
+                </div>`;
+            }
+        }
 
         let data;
         try {
@@ -207,23 +225,27 @@
             });
             data = await r.json();
             if (!r.ok && !data.encontrado) {
+                if (opts.rapido) { totalLeituras = Math.max(0, totalLeituras - 1); qtyPorEan[ean] = Math.max(0, (qtyPorEan[ean] || 1) - 1); atualizarContador(); }
                 mostrarResultadoErro(ean, data.msg || `Erro HTTP ${r.status}`);
-                if (typeof beep === 'function') beep('erro');
+                if (!opts.silencioso && typeof beep === 'function') beep('erro');
+                else if (opts.silencioso && typeof beep === 'function') beep('erro');
                 return;
             }
         } catch (err) {
+            if (opts.rapido) { totalLeituras = Math.max(0, totalLeituras - 1); qtyPorEan[ean] = Math.max(0, (qtyPorEan[ean] || 1) - 1); atualizarContador(); }
             mostrarResultadoErro(ean, 'Falha de rede/API: ' + err);
             if (typeof beep === 'function') beep('erro');
             return;
         }
 
         if (data.encontrado) {
-            totalLeituras++;
+            if (!opts.rapido) totalLeituras++;
             const p = data.produto;
             const qtd = data.qtd_sessao || 1;
             qtyPorEan[p.ean] = qtd;
             mostrarResultadoProduto(p, data);
-            if (typeof beep === 'function') beep(data.vencido ? 'erro' : 'ok');
+            if (!opts.silencioso && typeof beep === 'function') beep(data.vencido ? 'erro' : 'ok');
+            else if (opts.silencioso && data.vencido && typeof beep === 'function') beep('erro');
             document.getElementById('cadastro_rapido').classList.add('hidden');
             document.getElementById('vincular_painel').classList.add('hidden');
             if (data.vencido) {
@@ -231,6 +253,7 @@
             }
             atualizarListaLocal(p, data);
         } else {
+            if (opts.rapido) { totalLeituras = Math.max(0, totalLeituras - 1); qtyPorEan[ean] = Math.max(0, (qtyPorEan[ean] || 1) - 1); atualizarContador(); }
             eanPendente = data.ean || ean;
             mostrarResultadoErro(eanPendente, data.msg || 'Não cadastrado na lista RT');
             if (typeof beep === 'function') beep('erro');
@@ -247,12 +270,10 @@
             document.getElementById('rapido_lote').value = '';
             document.getElementById('rapido_vencimento').value = '';
             document.getElementById('rapido_dosagem').value = '';
-            document.getElementById('vincular_busca').focus();
             return;
         }
         atualizarContador();
         document.getElementById('sessao_display').textContent = `Sessão: ${sessaoAtual}`;
-        document.getElementById('ean_input').focus();
     }
 
     function mostrarResultadoProduto(p, data) {
