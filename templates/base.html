@@ -334,11 +334,10 @@
                 return;
             }
             try {
-                // Espera o <video> do html5-qrcode existir
                 let video = null;
-                for (let i = 0; i < 30; i++) {
+                for (let i = 0; i < 40; i++) {
                     video = document.querySelector('#camera-viewport video');
-                    if (video && video.srcObject) break;
+                    if (video && (video.srcObject || video.readyState >= 2)) break;
                     await new Promise(r => setTimeout(r, 100));
                 }
                 if (!video) {
@@ -359,16 +358,38 @@
                     ]);
                     hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
                 }
-                _zxingReader = new ZXing.BrowserMultiFormatReader(hints, 200);
+                _zxingReader = new ZXing.BrowserMultiFormatReader(hints);
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
                 setCamStatus('Procurando código… aproxime e centralize na faixa');
-                // decodeFromVideoElement continua até reset()
-                _zxingReader.decodeFromVideoElement(video, (result, err) => {
-                    if (!_cameraContinua) return;
-                    if (result) {
-                        const txt = result.getText ? result.getText() : String(result);
-                        if (txt) onScanSuccess(txt.trim());
+                let busy = false;
+                _nativeDetectTimer = setInterval(async () => {
+                    if (!_cameraContinua || busy || !_zxingReader) return;
+                    const v = document.querySelector('#camera-viewport video');
+                    if (!v || v.readyState < 2 || !v.videoWidth) return;
+                    busy = true;
+                    try {
+                        // Recorta a faixa central (onde está o guia verde) — melhora EAN
+                        const vw = v.videoWidth;
+                        const vh = v.videoHeight;
+                        const cropW = Math.floor(vw * 0.9);
+                        const cropH = Math.floor(vh * 0.28);
+                        const sx = Math.floor((vw - cropW) / 2);
+                        const sy = Math.floor(vh * 0.36);
+                        canvas.width = cropW;
+                        canvas.height = cropH;
+                        ctx.drawImage(v, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+                        const result = await _zxingReader.decodeFromCanvas(canvas);
+                        if (result) {
+                            const txt = result.getText ? result.getText() : String(result);
+                            if (txt) onScanSuccess(txt.trim());
+                        }
+                    } catch (_) {
+                        // NotFoundException — normal enquanto aponta
+                    } finally {
+                        busy = false;
                     }
-                });
+                }, 220);
             } catch (e) {
                 console.warn('zxing', e);
                 setCamStatus('Procurando código… aproxime e centralize na faixa');
