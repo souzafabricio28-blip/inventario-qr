@@ -82,23 +82,37 @@
         main { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
         /* Camera scanner overlay — bip contínuo */
-        #camera-scanner { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 10000; flex-direction: column; }
-        #camera-scanner.is-open { display: flex; }
-        #camera-viewport { flex: 1; min-height: 0; position: relative; }
-        #camera-viewport video { width: 100%; height: 100%; object-fit: cover; }
+        #camera-scanner { display: none; position: fixed; inset: 0; width: 100%; height: 100%; background: #000; z-index: 10000; }
+        #camera-scanner.is-open { display: block; }
+        #camera-viewport {
+            position: absolute; inset: 0; width: 100% !important; height: 100% !important;
+            min-height: 100%; min-width: 100%;
+        }
+        #camera-viewport video, #camera-viewport canvas {
+            width: 100% !important; height: 100% !important; object-fit: cover !important;
+        }
         #camera-scanner .close-cam { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; background: rgba(220,38,38,0.9); color: #fff; border: none; border-radius: 50%; width: 52px; height: 52px; font-size: 22px; cursor: pointer; z-index: 10002; }
-        #camera-scanner .cam-hint { position: absolute; top: calc(16px + env(safe-area-inset-top, 0px)); left: 12px; right: 72px; color: #fff; font-size: 14px; font-weight: 600; text-shadow: 0 1px 4px #000; z-index: 10001; }
+        #camera-scanner .cam-hint { position: absolute; top: calc(16px + env(safe-area-inset-top, 0px)); left: 12px; right: 72px; color: #fff; font-size: 14px; font-weight: 600; text-shadow: 0 1px 4px #000; z-index: 10001; pointer-events: none; }
+        #camera-scanner .cam-guide {
+            position: absolute; left: 5%; right: 5%; top: 42%; height: 16%;
+            border: 2px solid rgba(74, 222, 128, 0.95); border-radius: 10px;
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.35); z-index: 10001; pointer-events: none;
+        }
         #camera-scanner .cam-result { position: absolute; bottom: calc(28px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); background: rgba(22,163,74,0.92); color: #fff; padding: 12px 20px; border-radius: 12px; font-size: 16px; font-family: monospace; z-index: 10001; max-width: 90%; text-align: center; }
+        #camera-scanner .cam-status { position: absolute; bottom: calc(88px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); color: #e5e7eb; font-size: 13px; z-index: 10001; text-shadow: 0 1px 3px #000; pointer-events: none; }
         #html5qr-dummy { display: none !important; width: 1px; height: 1px; overflow: hidden; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 </head>
 <body class="bg-gray-50 {% if tema_config == 'escuro' %}dark{% endif %}">
     <div id="html5qr-dummy" aria-hidden="true"></div>
     <div id="camera-scanner">
-        <p class="cam-hint">Aponte para o código — bip contínuo (como leitor USB)</p>
+        <p class="cam-hint">Centralize o código de barras na faixa verde</p>
         <button class="close-cam" onclick="fecharCamera()" title="Fechar"><i class="fas fa-times"></i></button>
         <div id="camera-viewport"></div>
+        <div class="cam-guide" aria-hidden="true"></div>
+        <p id="cam-status" class="cam-status">Procurando código…</p>
         <div id="cam-result" class="cam-result hidden"></div>
     </div>
 
@@ -218,13 +232,17 @@
             mostrarToast(document.body.classList.contains('kiosk') ? 'Modo Kiosk ativado' : 'Modo normal', 'info');
         }
 
-        // Câmera ao vivo = bip contínuo (igual leitor USB). Foto só como fallback sem HTTPS.
+        // Câmera ao vivo = bip contínuo (igual leitor USB)
         let html5qr = null;
         let _scanBusy = false;
         let _cameraContinua = false;
         let _lastScanCode = '';
         let _lastScanAt = 0;
-        const SCAN_COOLDOWN_MS = 1600;
+        let _nativeDetectTimer = null;
+        let _nativeStream = null;
+        let _zxingReader = null;
+        let _zxingControls = null;
+        const SCAN_COOLDOWN_MS = 1400;
 
         function isMobileDevice() {
             return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
@@ -242,61 +260,119 @@
             });
         }
 
-        function formatosLeitura() {
-            try {
-                const F = Html5QrcodeSupportedFormats;
-                return [
-                    F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E,
-                    F.CODE_128, F.CODE_39, F.CODE_93, F.ITF,
-                    F.QR_CODE, F.DATA_MATRIX,
-                ];
-            } catch (_) {
-                return undefined;
+        function configCameraAoVivo() {
+            // Sem qrbox = lê a tela inteira (EAN 1D falha com recorte estreito no celular)
+            return {
+                fps: 20,
+                disableFlip: false,
+                aspectRatio: 1.777778,
+                experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+                videoConstraints: {
+                    facingMode: 'environment',
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                },
+            };
+        }
+
+        function setCamStatus(txt) {
+            const el = document.getElementById('cam-status');
+            if (el) el.textContent = txt;
+        }
+
+        function pararNativeDetect() {
+            if (_nativeDetectTimer) {
+                clearInterval(_nativeDetectTimer);
+                _nativeDetectTimer = null;
+            }
+            if (_zxingControls) {
+                try { _zxingControls.stop(); } catch (_) {}
+                _zxingControls = null;
+            }
+            if (_zxingReader) {
+                try { _zxingReader.reset(); } catch (_) {}
+                _zxingReader = null;
             }
         }
 
-        function configCameraAoVivo() {
-            return {
-                fps: 15,
-                qrbox: function(w, h) {
-                    const boxW = Math.floor(Math.min(w * 0.92, 360));
-                    const boxH = Math.floor(Math.min(h * 0.32, 160));
-                    return { width: boxW, height: boxH };
-                },
-                aspectRatio: window.innerHeight > window.innerWidth ? 1.333 : 1.777,
-                disableFlip: false,
-                rememberLastUsedCamera: true,
-            };
+        function iniciarNativeDetect() {
+            pararNativeDetect();
+            // Chrome/Android: API nativa (melhor para EAN)
+            if (typeof BarcodeDetector !== 'undefined') {
+                let detector;
+                try {
+                    detector = new BarcodeDetector({
+                        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'code_93', 'itf', 'qr_code', 'data_matrix']
+                    });
+                } catch (_) {
+                    try { detector = new BarcodeDetector(); } catch (e2) { detector = null; }
+                }
+                if (detector) {
+                    setCamStatus('Procurando código…');
+                    _nativeDetectTimer = setInterval(async () => {
+                        if (!_cameraContinua) return;
+                        const video = document.querySelector('#camera-viewport video');
+                        if (!video || video.readyState < 2) return;
+                        try {
+                            const codes = await detector.detect(video);
+                            if (codes && codes.length && codes[0].rawValue) {
+                                onScanSuccess(String(codes[0].rawValue).trim());
+                            }
+                        } catch (_) {}
+                    }, 200);
+                    return;
+                }
+            }
+            // iPhone/Safari: ZXing direto no vídeo (html5-qrcode sozinho falha muito em EAN)
+            iniciarZxingNoVideo();
         }
 
-        function escanearViaArquivo() {
-            if (_scanBusy) return;
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.capture = 'environment';
-            input.onchange = async function(e) {
-                const file = e.target.files && e.target.files[0];
-                input.value = '';
-                if (!file) return;
-                _scanBusy = true;
-                mostrarToast('Processando imagem...', 'info');
-                try {
-                    await ensureHtml5Qrcode();
-                    const url = URL.createObjectURL(file);
-                    const qr = new Html5Qrcode('html5qr-dummy');
-                    const codigo = await qr.scanFile(file, true);
-                    try { qr.clear(); } catch (_) {}
-                    URL.revokeObjectURL(url);
-                    _cameraContinua = false;
-                    onScanSuccess(String(codigo).trim());
-                } catch (_) {
-                    mostrarToast('Não foi possível ler o código. Aproxime e tente de novo.', 'erro');
-                } finally {
-                    _scanBusy = false;
+        async function iniciarZxingNoVideo() {
+            const ZXing = window.ZXing;
+            if (!ZXing || !ZXing.BrowserMultiFormatReader) {
+                setCamStatus('Procurando código… aproxime e centralize na faixa');
+                return;
+            }
+            try {
+                // Espera o <video> do html5-qrcode existir
+                let video = null;
+                for (let i = 0; i < 30; i++) {
+                    video = document.querySelector('#camera-viewport video');
+                    if (video && video.srcObject) break;
+                    await new Promise(r => setTimeout(r, 100));
                 }
-            };
-            input.click();
+                if (!video) {
+                    setCamStatus('Procurando código…');
+                    return;
+                }
+                const hints = new Map();
+                if (ZXing.DecodeHintType && ZXing.BarcodeFormat) {
+                    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+                        ZXing.BarcodeFormat.EAN_13,
+                        ZXing.BarcodeFormat.EAN_8,
+                        ZXing.BarcodeFormat.UPC_A,
+                        ZXing.BarcodeFormat.UPC_E,
+                        ZXing.BarcodeFormat.CODE_128,
+                        ZXing.BarcodeFormat.CODE_39,
+                        ZXing.BarcodeFormat.ITF,
+                        ZXing.BarcodeFormat.QR_CODE,
+                    ]);
+                    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+                }
+                _zxingReader = new ZXing.BrowserMultiFormatReader(hints, 200);
+                setCamStatus('Procurando código… aproxime e centralize na faixa');
+                // decodeFromVideoElement continua até reset()
+                _zxingReader.decodeFromVideoElement(video, (result, err) => {
+                    if (!_cameraContinua) return;
+                    if (result) {
+                        const txt = result.getText ? result.getText() : String(result);
+                        if (txt) onScanSuccess(txt.trim());
+                    }
+                });
+            } catch (e) {
+                console.warn('zxing', e);
+                setCamStatus('Procurando código… aproxime e centralize na faixa');
+            }
         }
 
         async function iniciarCameraAoVivo() {
@@ -310,25 +386,37 @@
                 return;
             }
 
+            // Desbloqueia áudio no gesto do toque
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            } catch (_) {}
+
             div.classList.add('is-open');
-            div.style.display = 'flex';
+            div.style.display = 'block';
             const camRes = document.getElementById('cam-result');
             if (camRes) camRes.classList.add('hidden');
             _cameraContinua = true;
             _lastScanCode = '';
             _lastScanAt = 0;
+            setCamStatus('Abrindo câmera…');
 
             try {
                 await ensureHtml5Qrcode();
+                // Espera o overlay ter tamanho real (senão o decoder não enxerga frames)
+                await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+                await new Promise(r => setTimeout(r, 80));
+
                 const viewport = document.getElementById('camera-viewport');
                 viewport.innerHTML = '';
-                html5qr = new Html5Qrcode('camera-viewport', { formatsToSupport: formatosLeitura(), verbose: false });
+                // Sem filtro de formatos — deixa o decoder tentar tudo (EAN/QR/Code128)
+                html5qr = new Html5Qrcode('camera-viewport', { verbose: false });
 
                 const cfg = configCameraAoVivo();
-                // iPhone: facingMode funciona; deviceId da lista costuma falhar
                 const tentativas = [
                     { facingMode: 'environment' },
                     { facingMode: { ideal: 'environment' } },
+                    { facingMode: { exact: 'environment' } },
                 ];
                 let started = false;
                 let lastErr = null;
@@ -352,6 +440,9 @@
                     }
                 }
                 if (!started) throw lastErr || new Error('sem câmera');
+
+                setCamStatus('Procurando código… aproxime e centralize na faixa');
+                iniciarNativeDetect();
             } catch (err) {
                 console.error('camera', err);
                 fecharCamera();
@@ -408,7 +499,6 @@
             const ean = String(decodedText || '').trim();
             if (!ean) return;
             const now = Date.now();
-            // Evita contar o mesmo código várias vezes enquanto aponta
             if (ean === _lastScanCode && (now - _lastScanAt) < SCAN_COOLDOWN_MS) return;
             _lastScanCode = ean;
             _lastScanAt = now;
@@ -417,13 +507,14 @@
             if (camRes) {
                 camRes.textContent = '✓ ' + ean;
                 camRes.classList.remove('hidden');
-                setTimeout(() => camRes.classList.add('hidden'), 900);
+                setTimeout(() => camRes.classList.add('hidden'), 1000);
             }
-            try { if (navigator.vibrate) navigator.vibrate(60); } catch (_) {}
-            // Som fica a cargo do processarLeitura / conferirEAN (evita bipe duplo)
+            setCamStatus('Lido! Aponte o próximo…');
+            try { if (navigator.vibrate) navigator.vibrate(80); } catch (_) {}
+            // Bipe imediatamente (feedback igual leitor USB)
+            if (typeof beep === 'function') beep('ok');
 
             if (_cameraContinua) {
-                // Mantém câmera aberta — próximo produto
                 aplicarCodigoLido(ean);
             } else {
                 fecharCamera();
@@ -433,6 +524,7 @@
 
         function fecharCamera() {
             _cameraContinua = false;
+            pararNativeDetect();
             const div = document.getElementById('camera-scanner');
             if (div) {
                 div.classList.remove('is-open');
@@ -446,6 +538,10 @@
                         try { inst.clear(); } catch (_) {}
                     });
                 } catch (_) {}
+            }
+            if (_nativeStream) {
+                try { _nativeStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+                _nativeStream = null;
             }
         }
 
