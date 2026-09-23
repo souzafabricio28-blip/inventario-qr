@@ -217,11 +217,78 @@ def pagina_produtos():
 
 # ── Scanner ────────────────────────────────────────────────
 
+def _garantir_produto_rt(item_rt):
+    """Garante produto no banco a partir da linha da planilha RT (ean + codigo_omie)."""
+    ean = (item_rt.get("ean") or "").strip()
+    omie = (item_rt.get("codigo_omie") or item_rt.get("codigo") or "").strip()
+    desc = (item_rt.get("descricao") or ean or omie).strip()
+    if not ean and not omie:
+        return None
+
+    # Preferir achar por ean da planilha, depois omie
+    produto = None
+    for chave in (ean, omie, item_rt.get("codigo")):
+        if chave:
+            produto = buscar_produto(chave)
+            if produto:
+                break
+
+    marca = ""
+    nome = desc
+    partes = desc.split(" ", 1)
+    if len(partes) > 1 and len(partes[0]) <= 20:
+        marca, nome = partes[0], partes[1]
+
+    codigo_interno = omie or ean
+    if produto:
+        ean_db = produto["ean"]
+        # atualiza nome/omie se mudou
+        if (produto.get("codigo_interno") or "") != codigo_interno or (produto.get("produto") or "") != nome:
+            atualizar_produto(ean_db, produto=nome, marca=marca, codigo_interno=codigo_interno)
+            produto = buscar_produto(ean_db) or produto
+    else:
+        # cadastra com EAN de barras quando existir; senao usa omie
+        ean_novo = ean or omie
+        ok, _ = criar_produto(
+            ean=ean_novo, produto=nome, marca=marca, codigo_interno=codigo_interno,
+        )
+        if not ok:
+            # pode já existir — tenta buscar de novo
+            produto = buscar_produto(ean_novo) or buscar_produto(omie)
+        else:
+            produto = buscar_produto(ean_novo)
+
+    if not produto:
+        return None
+
+    ean_db = produto["ean"]
+    # Vincula ean e codigo_omie como chaves de bipagem
+    for alias in (ean, omie, item_rt.get("codigo")):
+        if alias and alias != ean_db:
+            try:
+                vincular_codigo(alias, ean_db, origem="rt_planilha")
+            except Exception:
+                pass
+    return produto
+
+
 def _processar_bip(codigo_bruto, sessao):
-    """Cruza código lido com cadastro e registra +1 na contagem da sessão."""
+    """Cruza código lido com planilha RT (ean + codigo_omie) e soma na sessão."""
+    from database.rt_lista import resolver_na_planilha, carregar_lista_rt
+
     parsed = parse_codigo_lido(codigo_bruto)
     codigo = parsed["ean"] or (codigo_bruto or "").strip()
-    produto = buscar_produto(codigo)
+
+    # 1) Busca precisa na planilha: colunas ean e codigo_omie
+    carregar_lista_rt(force=False)
+    item_rt = resolver_na_planilha(codigo)
+    produto = None
+    if item_rt:
+        produto = _garantir_produto_rt(item_rt)
+
+    # 2) Fallback cadastro já existente no banco
+    if not produto:
+        produto = buscar_produto(codigo)
     if not produto and parsed.get("codigo_interno"):
         produto = buscar_produto(parsed["codigo_interno"])
 
@@ -229,7 +296,7 @@ def _processar_bip(codigo_bruto, sessao):
         return {
             "encontrado": False,
             "ean": codigo,
-            "msg": f"EAN/código não cadastrado: {codigo}",
+            "msg": f"EAN/código não cadastrado na planilha RT (ean/codigo_omie): {codigo}",
         }
 
     ean_real = produto["ean"]
@@ -238,10 +305,17 @@ def _processar_bip(codigo_bruto, sessao):
     registrar_contagem(ean_real, quantidade=1, sessao=sessao, lote=lote, data_vencimento=venc)
     qtd = qtd_contagem_sessao(ean_real, sessao)
     vencido = bool(venc and str(venc)[:10] < datetime.now().strftime("%Y-%m-%d"))
+    codigo_omie = (
+        (item_rt or {}).get("codigo_omie")
+        or produto.get("codigo_interno")
+        or ean_real
+    )
     return {
         "encontrado": True,
         "produto": produto,
-        "codigo_omie": produto.get("codigo_interno") or ean_real,
+        "codigo_omie": codigo_omie,
+        "ean_planilha": (item_rt or {}).get("ean") or produto.get("ean"),
+        "fonte": "planilha_rt" if item_rt else "banco",
         "qtd_sessao": qtd,
         "incremento": 1,
         "lote": lote,
@@ -325,15 +399,20 @@ def api_omie_sincronizar():
 @login_required
 @api_handler
 def api_rt_status():
-    """Status rápido da lista RT (não reimporta a planilha)."""
-    total = len(listar_produtos())
-    arquivo = next((p for p in caminho_lista_rt_oficial() if os.path.exists(p)), None)
+    """Status rápido da lista RT (índice ean + codigo_omie da planilha)."""
+    from database.rt_lista import status_lista_rt, carregar_lista_rt
+    carregar_lista_rt(force=False)
+    st = status_lista_rt()
+    total_db = len(listar_produtos())
     return jsonify({
-        "sucesso": True,
-        "total_produtos": total,
-        "arquivo": arquivo,
-        "pronto": total > 0,
-        "msg": f"{total} produtos no cadastro" if total else "Cadastro vazio — clique em Atualizar lista RT",
+        "sucesso": st.get("sucesso", False),
+        "total_produtos": st.get("total") or total_db,
+        "total_banco": total_db,
+        "arquivo": st.get("arquivo"),
+        "ean_index": st.get("ean_index", 0),
+        "omie_index": st.get("omie_index", 0),
+        "pronto": (st.get("total") or 0) > 0 or total_db > 0,
+        "msg": st.get("msg") or f"{total_db} produtos no cadastro",
     })
 
 
