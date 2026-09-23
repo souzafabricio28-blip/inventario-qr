@@ -25,7 +25,7 @@ from database.backend import (
     listar_estoque, listar_estoque_zerados, listar_saidas, registrar_saida,
     qtd_contagem_sessao, vincular_codigo,
     definir_contagem_sessao, excluir_contagem_sessao,
-    aplicar_contagem_como_estoque,
+    aplicar_contagem_como_estoque, zerar_contagens,
 )
 from database.import_excel import importar_excel, sincronizar_omie, sincronizar_rt_oficial, caminho_lista_rt_oficial
 from qrcode_gen.generator import gerar_qrcode_base64, gerar_qrcode
@@ -518,6 +518,29 @@ def api_aplicar_contagem_estoque():
     zerar = bool(data.get("zerar_nao_contados"))
     ok, msg = aplicar_contagem_como_estoque(sessao, zerar_nao_contados=zerar)
     return jsonify({"sucesso": ok, "msg": msg, "sessao": sessao}), (200 if ok else 400)
+
+
+@app.route("/api/contagem/zerar", methods=["POST"])
+@login_required
+@api_handler
+def api_zerar_contagem():
+    """Zera leituras da sessão (ou de todas). Opcionalmente apaga a sessão."""
+    data = request.json or {}
+    sessao = (data.get("sessao") or data.get("nome") or "").strip()
+    apagar = bool(data.get("apagar_sessao"))
+    ok, removidos = zerar_contagens(sessao=sessao, apagar_sessao=apagar)
+    if apagar and sessao and session.get("sessao_atual") == sessao:
+        session.pop("sessao_atual", None)
+    elif apagar and not sessao:
+        session.pop("sessao_atual", None)
+    alvo = f'sessão "{sessao}"' if sessao else "todas as sessões"
+    extra = " e sessão removida" if apagar else ""
+    return jsonify({
+        "sucesso": ok,
+        "removidos": removidos,
+        "sessao": sessao,
+        "msg": f"Contagem zerada ({alvo}): {removidos} leitura(s) removida(s){extra}.",
+    })
 
 
 @app.route("/api/omie/sincronizar", methods=["POST"])

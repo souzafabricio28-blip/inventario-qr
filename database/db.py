@@ -235,6 +235,30 @@ def excluir_contagem_sessao(ean, sessao):
     return True, removidos
 
 
+def zerar_contagens(sessao="", apagar_sessao=False):
+    """
+    Zera leituras de inventário.
+    sessao vazia = todas as sessões.
+    apagar_sessao=True remove também o registro em sessoes_inventario.
+    """
+    sessao = (sessao or "").strip()
+    conn = criar_conexao()
+    cursor = conn.cursor()
+    if sessao:
+        cursor.execute("DELETE FROM inventario_contagem WHERE sessao = ?", (sessao,))
+        removidos = cursor.rowcount or 0
+        if apagar_sessao:
+            cursor.execute("DELETE FROM sessoes_inventario WHERE nome = ?", (sessao,))
+    else:
+        cursor.execute("DELETE FROM inventario_contagem")
+        removidos = cursor.rowcount or 0
+        if apagar_sessao:
+            cursor.execute("DELETE FROM sessoes_inventario")
+    conn.commit()
+    conn.close()
+    return True, removidos
+
+
 def aplicar_contagem_como_estoque(sessao, zerar_nao_contados=False):
     """
     Grava a contagem da sessão como estoque geral (substitui quantidade_estoque).

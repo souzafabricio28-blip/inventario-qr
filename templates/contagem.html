@@ -13,6 +13,11 @@
                     title="Encerra a sessão selecionada (ou todas as abertas)">
                 <i class="fas fa-lock"></i> Encerrar
             </button>
+            <button type="button" id="btn_zerar_contagem" onclick="zerarContagem()"
+                    class="bg-rose-700 text-white px-3 py-2 rounded-lg hover:bg-rose-800 text-sm font-semibold"
+                    title="Apaga as leituras contadas da sessão (ou de todas)">
+                <i class="fas fa-eraser"></i> Zerar
+            </button>
             <label class="flex items-center gap-2 text-sm border rounded-lg px-3 py-2 cursor-pointer">
                 <input type="checkbox" id="chk_cruzar" checked onchange="carregarContagem()">
                 Cruzar cadastro RT
@@ -145,6 +150,50 @@
             }
         } catch (e) {
             alert('Falha ao encerrar: ' + e);
+        }
+    }
+
+    async function zerarContagem() {
+        const sessao = document.getElementById('select_sessao').value;
+        const alvo = sessao
+            ? `a sessão "${sessao}"`
+            : 'TODAS as sessões';
+        if (!confirm(
+            `ZERAR a contagem de ${alvo}?\n\n` +
+            'Isso apaga as leituras (Contado volta a 0).\n' +
+            'O estoque geral NÃO é alterado.'
+        )) return;
+
+        let apagar = false;
+        if (sessao) {
+            apagar = confirm(
+                'Também remover esta sessão da lista?\n\n' +
+                'OK = apagar sessão\nCancelar = só zerar leituras'
+            );
+        } else {
+            apagar = confirm(
+                'Também apagar TODAS as sessões da lista?\n\n' +
+                'OK = apagar sessões\nCancelar = só zerar leituras'
+            );
+        }
+
+        try {
+            const r = await fetch('/api/contagem/zerar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ sessao, apagar_sessao: apagar }),
+            });
+            const data = await r.json();
+            alert(data.msg || (data.sucesso ? 'OK' : 'Erro'));
+            if (data.sucesso) {
+                if (apagar) {
+                    document.getElementById('select_sessao').value = '';
+                }
+                await carregarSessoes();
+                await carregarContagem();
+            }
+        } catch (e) {
+            alert('Falha ao zerar: ' + e);
         }
     }
 
