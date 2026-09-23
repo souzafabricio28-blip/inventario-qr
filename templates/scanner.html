@@ -85,6 +85,31 @@
         </button>
     </div>
 </div>
+
+<div id="modal_editar_scanner" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
+        <h3 class="text-xl font-bold mb-4">Editar Produto</h3>
+        <div class="space-y-3">
+            <input id="edit_codigo_interno" placeholder="Código Interno" class="w-full border rounded px-3 py-2">
+            <input id="edit_ean" class="w-full border rounded px-3 py-2 bg-gray-100" readonly>
+            <input id="edit_produto" placeholder="Nome" class="w-full border rounded px-3 py-2">
+            <input id="edit_marca" placeholder="Marca" class="w-full border rounded px-3 py-2">
+            <input id="edit_unidade" placeholder="Unidade" class="w-full border rounded px-3 py-2">
+            <input id="edit_base" placeholder="Base" class="w-full border rounded px-3 py-2">
+            <input id="edit_dosagem" placeholder="Dosagem" class="w-full border rounded px-3 py-2">
+            <div class="grid grid-cols-2 gap-3">
+                <input id="edit_lote" placeholder="Lote" class="w-full border rounded px-3 py-2">
+                <input id="edit_vencimento" type="date" class="w-full border rounded px-3 py-2">
+            </div>
+        </div>
+        <div class="flex space-x-3 mt-4">
+            <button onclick="salvarEdicaoScanner()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">
+                <i class="fas fa-save"></i> Salvar
+            </button>
+            <button onclick="fecharEdicaoScanner()" class="bg-gray-300 px-6 py-2 rounded-lg hover:bg-gray-400">Cancelar</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
@@ -334,6 +359,11 @@
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                     <div class="text-2xl font-black text-indigo-700 tabular-nums" data-qtd>${qtd}</div>
+                    <button type="button" title="Editar produto"
+                        class="px-2 py-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 text-sm"
+                        onclick='abrirEdicaoScanner(${eanJs})'>
+                        <i class="fas fa-box"></i>
+                    </button>
                     <button type="button" title="Editar quantidade"
                         class="px-2 py-1.5 rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 text-sm"
                         onclick='editarQuantidadeItem(${eanJs}, ${qtd}, ${nomeJs})'>
@@ -581,5 +611,60 @@
         iniciarLivePC();
         document.getElementById('ean_input').focus();
     })();
+
+    async function abrirEdicaoScanner(ean) {
+        try {
+            const r = await fetch(`/api/produtos/${ean}`);
+            if (!r.ok) return mostrarToast('Produto não encontrado', 'erro');
+            const p = await r.json();
+            document.getElementById('edit_codigo_interno').value = p.codigo_interno || '';
+            document.getElementById('edit_ean').value = p.ean;
+            document.getElementById('edit_produto').value = p.produto || '';
+            document.getElementById('edit_marca').value = p.marca || '';
+            document.getElementById('edit_unidade').value = p.unidade_medida || 'UN';
+            document.getElementById('edit_base').value = p.base_especifica || '';
+            document.getElementById('edit_dosagem').value = p.instrucao_dosagem || '';
+            document.getElementById('edit_lote').value = p.lote || '';
+            document.getElementById('edit_vencimento').value = p.data_vencimento || '';
+            document.getElementById('modal_editar_scanner').classList.remove('hidden');
+        } catch (e) {
+            mostrarToast('Erro ao abrir produto', 'erro');
+        }
+    }
+
+    function fecharEdicaoScanner() {
+        document.getElementById('modal_editar_scanner').classList.add('hidden');
+        document.getElementById('ean_input').focus();
+    }
+
+    async function salvarEdicaoScanner() {
+        const ean = document.getElementById('edit_ean').value;
+        const data = {
+            produto: document.getElementById('edit_produto').value.trim(),
+            marca: document.getElementById('edit_marca').value.trim(),
+            unidade_medida: document.getElementById('edit_unidade').value.trim() || 'UN',
+            base_especifica: document.getElementById('edit_base').value.trim(),
+            instrucao_dosagem: document.getElementById('edit_dosagem').value.trim(),
+            lote: document.getElementById('edit_lote').value.trim(),
+            data_vencimento: document.getElementById('edit_vencimento').value,
+            codigo_interno: document.getElementById('edit_codigo_interno').value.trim(),
+        };
+        try {
+            const r = await fetch(`/api/produtos/${ean}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const res = await r.json();
+            mostrarToast(res.msg, res.sucesso ? 'sucesso' : 'erro');
+            if (res.sucesso) {
+                fecharEdicaoScanner();
+                // Atualiza a lista na tela para refletir o novo nome/código
+                carregarResumoSessao();
+            }
+        } catch (e) {
+            mostrarToast('Erro ao salvar produto', 'erro');
+        }
+    }
 </script>
 {% endblock %}
