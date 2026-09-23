@@ -18,6 +18,7 @@ if PG_ATIVO:
         fechar_sessao, registrar_validacao, get_ultima_validacao,
         qtd_contagem_sessao, vincular_codigo,
         definir_contagem_sessao, excluir_contagem_sessao,
+        aplicar_contagem_como_estoque,
     )
 else:
     from .schema import criar_conexao, criar_tabelas, get_db, get_db_path, DB_PATH
@@ -35,6 +36,7 @@ else:
         fechar_sessao, registrar_validacao, get_ultima_validacao,
         qtd_contagem_sessao, vincular_codigo,
         definir_contagem_sessao, excluir_contagem_sessao,
+        aplicar_contagem_como_estoque,
     )
 
 

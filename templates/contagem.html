@@ -3,22 +3,25 @@
 {% block content %}
 <div class="bg-white rounded-xl shadow-md p-6">
     <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
-        <h2 class="text-2xl font-bold"><i class="fas fa-chart-bar text-purple-600"></i> Contagem × Omie</h2>
+        <h2 class="text-2xl font-bold"><i class="fas fa-chart-bar text-purple-600"></i> Contagem × Estoque</h2>
         <div class="flex flex-wrap items-center gap-2">
             <select id="select_sessao" class="border rounded-lg px-3 py-2 text-sm" onchange="carregarContagem()">
                 <option value="">Todas as sessões</option>
             </select>
             <label class="flex items-center gap-2 text-sm border rounded-lg px-3 py-2 cursor-pointer">
                 <input type="checkbox" id="chk_cruzar" checked onchange="carregarContagem()">
-                Cruzar cadastro Omie
+                Cruzar cadastro RT
             </label>
             <select id="filtro_status" class="border rounded-lg px-3 py-2 text-sm" onchange="renderTabela()">
                 <option value="">Todos</option>
                 <option value="contado">Só contados</option>
                 <option value="pendente">Só pendentes</option>
             </select>
-            <button onclick="sincronizarOmie()" class="bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700 text-sm" title="Sincronizar códigos Omie">
-                <i class="fas fa-sync"></i> Omie
+            <button onclick="aplicarComoEstoque()" class="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold" title="Grava a contagem como estoque geral da loja">
+                <i class="fas fa-warehouse"></i> Aplicar → Estoque
+            </button>
+            <button onclick="sincronizarOmie()" class="bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700 text-sm" title="Sincronizar lista RT">
+                <i class="fas fa-sync"></i> RT
             </button>
             <button onclick="exportarExcel()" class="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 text-sm">
                 <i class="fas fa-file-excel"></i>
@@ -133,14 +136,54 @@
         const btn = event.currentTarget;
         btn.disabled = true;
         try {
-            const r = await fetch('/api/omie/sincronizar', { method: 'POST' });
+            const r = await fetch('/api/rt/sincronizar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ force: true }),
+            });
             const data = await r.json();
             alert(data.msg || (data.sucesso ? 'OK' : 'Erro'));
             if (data.sucesso) await carregarContagem();
         } catch (e) {
-            alert('Falha ao sincronizar Omie');
+            alert('Falha ao sincronizar lista RT');
         } finally {
             btn.disabled = false;
+        }
+    }
+
+    async function aplicarComoEstoque() {
+        const sessao = document.getElementById('select_sessao').value;
+        if (!sessao) {
+            alert('Selecione uma sessão de inventário antes de aplicar.');
+            return;
+        }
+        if (!confirm(
+            'Aplicar a contagem da sessão "' + sessao + '" como ESTOQUE GERAL?\n\n' +
+            '• Produtos contados: quantidade vira o estoque oficial\n' +
+            '• Entradas (NF-e) depois: SOMAM nesse estoque\n' +
+            '• Saídas: DIMINUEM o estoque'
+        )) return;
+
+        const zerarNao = confirm(
+            'Zerar estoque dos produtos NÃO contados nesta sessão?\n\n' +
+            'OK = sim, zerar não bipados\nCancelar = manter estoque antigo deles'
+        );
+        try {
+            const r = await fetch('/api/contagem/aplicar-estoque', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ sessao, zerar_nao_contados: zerarNao }),
+            });
+            const data = await r.json();
+            alert(data.msg || (data.sucesso ? 'Estoque atualizado' : 'Erro'));
+            if (data.sucesso) {
+                await carregarContagem();
+                if (confirm('Abrir a tela de Estoque para conferir?')) {
+                    window.location.href = '/estoque';
+                }
+            }
+        } catch (e) {
+            alert('Falha ao aplicar estoque: ' + e);
         }
     }
 

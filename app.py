@@ -24,6 +24,7 @@ from database.backend import (
     listar_estoque, listar_estoque_zerados, listar_saidas, registrar_saida,
     qtd_contagem_sessao, vincular_codigo,
     definir_contagem_sessao, excluir_contagem_sessao,
+    aplicar_contagem_como_estoque,
 )
 from database.import_excel import importar_excel, sincronizar_omie, sincronizar_rt_oficial, caminho_lista_rt_oficial
 from qrcode_gen.generator import gerar_qrcode_base64, gerar_qrcode
@@ -434,6 +435,18 @@ def api_excluir_contagem_item():
         "removidos": result,
         "msg": "Item excluído da sessão",
     })
+
+
+@app.route("/api/contagem/aplicar-estoque", methods=["POST"])
+@login_required
+@api_handler
+def api_aplicar_contagem_estoque():
+    """Aplica a contagem da sessão como estoque geral da loja."""
+    data = request.json or {}
+    sessao = (data.get("sessao") or session.get("sessao_atual") or "").strip()
+    zerar = bool(data.get("zerar_nao_contados"))
+    ok, msg = aplicar_contagem_como_estoque(sessao, zerar_nao_contados=zerar)
+    return jsonify({"sucesso": ok, "msg": msg, "sessao": sessao}), (200 if ok else 400)
 
 
 @app.route("/api/omie/sincronizar", methods=["POST"])

@@ -213,6 +213,58 @@ def excluir_contagem_sessao(ean, sessao):
     return True, removidos
 
 
+def aplicar_contagem_como_estoque(sessao, zerar_nao_contados=False):
+    """
+    Grava a contagem da sessão como estoque geral (substitui quantidade_estoque).
+    Entradas futuras (NF-e) continuam somando em cima desse saldo.
+    """
+    sessao = (sessao or "").strip()
+    if not sessao:
+        return False, "Informe a sessão de inventário"
+
+    contagens = get_contagens(sessao, cruzar=False)
+    itens = [c for c in contagens if int(c.get("total_contado") or 0) > 0]
+    if not itens:
+        return False, "Nenhum item contado nesta sessão"
+
+    with get_db() as conn:
+        atualizados = 0
+        eans_ok = set()
+        for c in itens:
+            ean = (c.get("ean") or "").strip()
+            qtd = int(c.get("total_contado") or 0)
+            if not ean or qtd <= 0:
+                continue
+            lote = c.get("lote") or ""
+            venc = c.get("data_vencimento") or ""
+            cur = _exec(conn,
+                """UPDATE produtos SET
+                   quantidade_estoque = %s,
+                   lote = CASE WHEN %s != '' THEN %s ELSE lote END,
+                   data_vencimento = CASE WHEN %s != '' THEN %s ELSE data_vencimento END,
+                   updated_at = CURRENT_TIMESTAMP
+                   WHERE ean = %s""",
+                (qtd, lote, lote, venc, venc, ean))
+            if cur.rowcount:
+                atualizados += 1
+                eans_ok.add(ean)
+
+        zerados = 0
+        if zerar_nao_contados and eans_ok:
+            cur = _exec(conn,
+                """UPDATE produtos SET quantidade_estoque = 0, updated_at = CURRENT_TIMESTAMP
+                   WHERE ean <> ALL(%s) AND COALESCE(quantidade_estoque,0) > 0""",
+                (list(eans_ok),))
+            zerados = cur.rowcount
+
+        conn.commit()
+
+    msg = f"Estoque geral atualizado: {atualizados} produto(s) com a contagem da sessão '{sessao}'"
+    if zerados:
+        msg += f"; {zerados} não contados zerados"
+    return True, msg
+
+
 def get_contagens(sessao="", cruzar=False):
     """Lista contagens. Se cruzar=True, inclui todo o cadastro (Omie) com qtd 0."""
     cols = (
