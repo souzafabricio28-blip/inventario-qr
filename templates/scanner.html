@@ -566,7 +566,7 @@
     function iniciarLivePC() {
         if (_livePoll) return;
         atualizarLive();
-        _livePoll = setInterval(atualizarLive, 1000);
+        _livePoll = setInterval(atualizarLive, 300);
     }
 
     window.processarLeitura = processarLeitura;

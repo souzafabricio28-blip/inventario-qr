@@ -104,6 +104,7 @@
     </style>
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
 </head>
 <body class="bg-gray-50 {% if tema_config == 'escuro' %}dark{% endif %}">
     <div id="html5qr-dummy" aria-hidden="true"></div>
@@ -379,14 +380,32 @@
                         canvas.width = cropW;
                         canvas.height = cropH;
                         ctx.drawImage(v, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
-                        const result = await _zxingReader.decodeFromCanvas(canvas);
-                        if (result) {
-                            const txt = result.getText ? result.getText() : String(result);
-                            if (txt) onScanSuccess(txt.trim());
+                        try {
+                            const result = await _zxingReader.decodeFromCanvas(canvas);
+                            if (result) {
+                                const txt = result.getText ? result.getText() : String(result);
+                                if (txt) { onScanSuccess(txt.trim()); busy = false; return; }
+                            }
+                        } catch (_) {
+                            // ZXing não achou, tenta Quagga2 para EANs difíceis
+                        }
+                        
+                        if (window.Quagga) {
+                            Quagga.decodeSingle({
+                                src: canvas.toDataURL(),
+                                numOfWorkers: 0,
+                                inputStream: { size: cropW },
+                                decoder: { readers: ["ean_reader", "upc_reader", "code_128_reader"] }
+                            }, function(result) {
+                                if (result && result.codeResult && result.codeResult.code) {
+                                    onScanSuccess(result.codeResult.code);
+                                }
+                                busy = false;
+                            });
+                        } else {
+                            busy = false;
                         }
                     } catch (_) {
-                        // NotFoundException — normal enquanto aponta
-                    } finally {
                         busy = false;
                     }
                 }, 220);
