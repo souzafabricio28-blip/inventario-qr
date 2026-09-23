@@ -187,6 +187,53 @@ def registrar_contagem(ean, quantidade=1, sessao="", lote="", data_vencimento=""
     conn.close()
 
 
+def definir_contagem_sessao(ean, quantidade, sessao, lote="", data_vencimento=""):
+    """Define a quantidade total do item na sessão (substitui leituras anteriores)."""
+    ean = (ean or "").strip()
+    sessao = (sessao or "").strip()
+    try:
+        quantidade = int(quantidade)
+    except (TypeError, ValueError):
+        return False, "Quantidade inválida"
+    if not ean or not sessao:
+        return False, "EAN e sessão são obrigatórios"
+    if quantidade < 0:
+        return False, "Quantidade não pode ser negativa"
+
+    conn = criar_conexao()
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM inventario_contagem WHERE ean = ? AND sessao = ?",
+        (ean, sessao),
+    )
+    if quantidade > 0:
+        cursor.execute(
+            """INSERT INTO inventario_contagem (ean, quantidade_contada, sessao, lote, data_vencimento)
+               VALUES (?, ?, ?, ?, ?)""",
+            (ean, quantidade, sessao, lote or "", data_vencimento or ""),
+        )
+    conn.commit()
+    conn.close()
+    return True, quantidade
+
+
+def excluir_contagem_sessao(ean, sessao):
+    """Remove o item da contagem da sessão."""
+    ean = (ean or "").strip()
+    sessao = (sessao or "").strip()
+    if not ean or not sessao:
+        return False, "EAN e sessão são obrigatórios"
+    conn = criar_conexao()
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM inventario_contagem WHERE ean = ? AND sessao = ?",
+        (ean, sessao),
+    )
+    removidos = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return True, removidos
+
 def get_contagens(sessao="", cruzar=False):
     """Lista contagens. Se cruzar=True, inclui todo o cadastro (Omie) com qtd 0."""
     cols = (

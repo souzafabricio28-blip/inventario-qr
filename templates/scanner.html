@@ -287,17 +287,39 @@
             <p class="text-sm text-gray-500 mt-1">Vincule a um produto da lista ou cadastre abaixo.</p>`;
     }
 
+    function htmlItemSessao(ean, produto, omie, qtd) {
+        const eanJs = JSON.stringify(ean);
+        const nomeJs = JSON.stringify(produto || '');
+        return `
+            <div class="flex justify-between items-center gap-2">
+                <div class="min-w-0 flex-1">
+                    <div class="font-medium truncate">${produto || ''}</div>
+                    <div class="text-xs text-gray-500 font-mono">Cód ${omie || ean} · EAN ${ean}</div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <div class="text-2xl font-black text-indigo-700 tabular-nums" data-qtd>${qtd}</div>
+                    <button type="button" title="Editar quantidade"
+                        class="px-2 py-1.5 rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 text-sm"
+                        onclick='editarQuantidadeItem(${eanJs}, ${qtd}, ${nomeJs})'>
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button type="button" title="Excluir da sessão"
+                        class="px-2 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 text-sm"
+                        onclick='excluirItemSessao(${eanJs}, ${nomeJs})'>
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>`;
+    }
+
     function atualizarListaLocal(p, data) {
         const box = document.getElementById('resumo_sessao');
+        // remove placeholder vazio
+        for (const el of [...box.children]) {
+            if (!el.dataset.ean) el.remove();
+        }
         const omie = data.codigo_omie || p.codigo_interno || p.ean;
-        const html = `
-            <div class="flex justify-between items-center gap-2">
-                <div class="min-w-0">
-                    <div class="font-medium truncate">${p.produto}</div>
-                    <div class="text-xs text-gray-500 font-mono">Cód ${omie} · EAN ${p.ean}</div>
-                </div>
-                <div class="text-2xl font-black text-indigo-700 tabular-nums">${data.qtd_sessao}</div>
-            </div>`;
+        const html = htmlItemSessao(p.ean, p.produto, omie, data.qtd_sessao);
         let row = null;
         for (const el of box.children) {
             if (el.dataset.ean === p.ean) { row = el; break; }
@@ -312,7 +334,46 @@
             el.innerHTML = html;
             box.prepend(el);
         }
-        document.getElementById('itens_unicos').textContent = `${box.children.length} itens`;
+        document.getElementById('itens_unicos').textContent = `${box.querySelectorAll('[data-ean]').length} itens`;
+    }
+
+    async function editarQuantidadeItem(ean, qtdAtual, nome) {
+        if (!sessaoAtual) return mostrarToast('Nenhuma sessão ativa', 'erro');
+        const entrada = prompt(`Nova quantidade para:\n${nome || ean}`, String(qtdAtual));
+        if (entrada === null) return;
+        const qtd = parseInt(String(entrada).trim(), 10);
+        if (Number.isNaN(qtd) || qtd < 0) {
+            return mostrarToast('Quantidade inválida', 'erro');
+        }
+        if (qtd === 0) {
+            return excluirItemSessao(ean, nome);
+        }
+        const r = await fetch('/api/contagem/item', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ ean, sessao: sessaoAtual, quantidade: qtd }),
+        });
+        const data = await r.json();
+        if (!data.sucesso) return mostrarToast(data.msg || 'Falha ao editar', 'erro');
+        mostrarToast(`Quantidade: ${qtd}`, 'sucesso');
+        await carregarResumoSessao();
+        document.getElementById('ean_input').focus();
+    }
+
+    async function excluirItemSessao(ean, nome) {
+        if (!sessaoAtual) return mostrarToast('Nenhuma sessão ativa', 'erro');
+        if (!confirm(`Excluir da sessão?\n${nome || ean}`)) return;
+        const r = await fetch('/api/contagem/item', {
+            method: 'DELETE',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ ean, sessao: sessaoAtual }),
+        });
+        const data = await r.json();
+        if (!data.sucesso) return mostrarToast(data.msg || 'Falha ao excluir', 'erro');
+        delete qtyPorEan[ean];
+        mostrarToast('Item excluído', 'sucesso');
+        await carregarResumoSessao();
+        document.getElementById('ean_input').focus();
     }
 
     async function carregarResumoSessao() {
@@ -324,15 +385,7 @@
         box.innerHTML = lista.map(c => {
             const omie = c.codigo_omie || c.codigo_interno || c.ean;
             qtyPorEan[c.ean] = c.total_contado;
-            return `<div class="px-4 py-3" data-ean="${c.ean}">
-                <div class="flex justify-between items-center gap-2">
-                    <div class="min-w-0">
-                        <div class="font-medium truncate">${c.produto}</div>
-                        <div class="text-xs text-gray-500 font-mono">Cód ${omie} · EAN ${c.ean}</div>
-                    </div>
-                    <div class="text-2xl font-black text-indigo-700 tabular-nums">${c.total_contado}</div>
-                </div>
-            </div>`;
+            return `<div class="px-4 py-3" data-ean="${c.ean}">${htmlItemSessao(c.ean, c.produto, omie, c.total_contado)}</div>`;
         }).join('') || '<div class="px-4 py-6 text-center text-gray-400 text-sm">Nenhuma leitura ainda</div>';
         document.getElementById('itens_unicos').textContent = `${lista.length} itens`;
         totalLeituras = lista.reduce((a,c) => a + (c.total_contado||0), 0);

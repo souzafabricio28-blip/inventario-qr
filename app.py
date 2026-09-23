@@ -23,6 +23,7 @@ from database.backend import (
     finalizar_recebimento, excluir_recebimento, get_etiquetas_nfe,
     listar_estoque, listar_estoque_zerados, listar_saidas, registrar_saida,
     qtd_contagem_sessao, vincular_codigo,
+    definir_contagem_sessao, excluir_contagem_sessao,
 )
 from database.import_excel import importar_excel, sincronizar_omie, sincronizar_rt_oficial, caminho_lista_rt_oficial
 from qrcode_gen.generator import gerar_qrcode_base64, gerar_qrcode
@@ -385,6 +386,54 @@ def api_contagem():
     sessao = request.args.get("sessao", "")
     cruzar = request.args.get("cruzar", "1") in ("1", "true", "True", "yes")
     return jsonify(get_contagens(sessao, cruzar=cruzar))
+
+
+@app.route("/api/contagem/item", methods=["PUT", "POST"])
+@login_required
+@api_handler
+def api_definir_contagem_item():
+    """Edita a quantidade total de um item na sessão."""
+    data = request.json or {}
+    ean = (data.get("ean") or "").strip()
+    sessao = (data.get("sessao") or session.get("sessao_atual") or "").strip()
+    quantidade = data.get("quantidade")
+    ok, result = definir_contagem_sessao(
+        ean, quantidade, sessao,
+        lote=data.get("lote") or "",
+        data_vencimento=data.get("data_vencimento") or "",
+    )
+    if not ok:
+        return jsonify({"sucesso": False, "msg": result}), 400
+    qtd = int(result)
+    produto = buscar_produto(ean) if qtd > 0 else None
+    return jsonify({
+        "sucesso": True,
+        "ean": ean,
+        "qtd_sessao": qtd,
+        "excluido": qtd <= 0,
+        "produto": produto,
+        "msg": f"Quantidade atualizada para {qtd}" if qtd > 0 else "Item removido da sessão",
+    })
+
+
+@app.route("/api/contagem/item", methods=["DELETE"])
+@login_required
+@api_handler
+def api_excluir_contagem_item():
+    """Exclui o item da contagem da sessão."""
+    data = request.json or {}
+    ean = (data.get("ean") or request.args.get("ean") or "").strip()
+    sessao = (data.get("sessao") or request.args.get("sessao")
+              or session.get("sessao_atual") or "").strip()
+    ok, result = excluir_contagem_sessao(ean, sessao)
+    if not ok:
+        return jsonify({"sucesso": False, "msg": result}), 400
+    return jsonify({
+        "sucesso": True,
+        "ean": ean,
+        "removidos": result,
+        "msg": "Item excluído da sessão",
+    })
 
 
 @app.route("/api/omie/sincronizar", methods=["POST"])
