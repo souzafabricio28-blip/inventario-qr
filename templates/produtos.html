@@ -69,7 +69,7 @@
         <h3 class="text-xl font-bold mb-4">Editar Produto</h3>
         <div class="space-y-3">
             <input id="edit_codigo_interno" placeholder="Código Interno" class="w-full border rounded px-3 py-2">
-            <input id="edit_ean" class="w-full border rounded px-3 py-2 bg-gray-100" readonly>
+            <input id="edit_ean" class="w-full border rounded px-3 py-2 font-mono" placeholder="EAN">
             <input id="edit_produto" placeholder="Nome" class="w-full border rounded px-3 py-2">
             <input id="edit_marca" placeholder="Marca" class="w-full border rounded px-3 py-2">
             <input id="edit_unidade" placeholder="Unidade" class="w-full border rounded px-3 py-2">
@@ -190,7 +190,9 @@
     }
 
     // Edição
+    let eanEditando = '';
     async function abrirEdicao(ean) {
+        eanEditando = ean;
         const r = await fetch(`/api/produtos/${ean}`);
         const p = await r.json();
         document.getElementById('edit_codigo_interno').value = p.codigo_interno || '';
@@ -206,8 +208,10 @@
     }
     function fecharEdicao() { document.getElementById('modal_editar').classList.add('hidden'); }
     async function salvarEdicao() {
-        const ean = document.getElementById('edit_ean').value;
+        const novoEan = document.getElementById('edit_ean').value.trim();
+        if (!novoEan) return mostrarToast('EAN obrigatório', 'erro');
         const data = {
+            ean: novoEan,
             produto: document.getElementById('edit_produto').value.trim(),
             marca: document.getElementById('edit_marca').value.trim(),
             unidade_medida: document.getElementById('edit_unidade').value.trim() || 'UN',
@@ -217,7 +221,7 @@
             data_vencimento: document.getElementById('edit_vencimento').value,
             codigo_interno: document.getElementById('edit_codigo_interno').value.trim(),
         };
-        const r = await fetch(`/api/produtos/${ean}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+        const r = await fetch(`/api/produtos/${eanEditando}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
         const res = await r.json();
         mostrarToast(res.msg, res.sucesso ? 'sucesso' : 'erro');
         if (res.sucesso) { fecharEdicao(); carregarProdutos(); }

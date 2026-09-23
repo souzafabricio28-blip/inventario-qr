@@ -91,7 +91,7 @@
         <h3 class="text-xl font-bold mb-4">Editar Produto</h3>
         <div class="space-y-3">
             <input id="edit_codigo_interno" placeholder="Código Interno" class="w-full border rounded px-3 py-2">
-            <input id="edit_ean" class="w-full border rounded px-3 py-2 bg-gray-100" readonly>
+            <input id="edit_ean" class="w-full border rounded px-3 py-2 font-mono" placeholder="EAN">
             <input id="edit_produto" placeholder="Nome" class="w-full border rounded px-3 py-2">
             <input id="edit_marca" placeholder="Marca" class="w-full border rounded px-3 py-2">
             <input id="edit_unidade" placeholder="Unidade" class="w-full border rounded px-3 py-2">
@@ -114,6 +114,7 @@
 {% block scripts %}
 <script>
     let eanPendente = '';
+    let eanEditando = '';
     let totalLeituras = 0;
     const qtyPorEan = {};
     let rtSincronizado = false;
@@ -614,6 +615,7 @@
 
     async function abrirEdicaoScanner(ean) {
         try {
+            eanEditando = ean;
             const r = await fetch(`/api/produtos/${ean}`);
             if (!r.ok) return mostrarToast('Produto não encontrado', 'erro');
             const p = await r.json();
@@ -638,8 +640,10 @@
     }
 
     async function salvarEdicaoScanner() {
-        const ean = document.getElementById('edit_ean').value;
+        const novoEan = document.getElementById('edit_ean').value.trim();
+        if (!novoEan) return mostrarToast('EAN obrigatório', 'erro');
         const data = {
+            ean: novoEan,
             produto: document.getElementById('edit_produto').value.trim(),
             marca: document.getElementById('edit_marca').value.trim(),
             unidade_medida: document.getElementById('edit_unidade').value.trim() || 'UN',
@@ -650,7 +654,7 @@
             codigo_interno: document.getElementById('edit_codigo_interno').value.trim(),
         };
         try {
-            const r = await fetch(`/api/produtos/${ean}`, {
+            const r = await fetch(`/api/produtos/${eanEditando}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)

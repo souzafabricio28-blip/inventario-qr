@@ -145,9 +145,9 @@ def criar_produto(ean, produto, marca="", unidade_medida="UN",
         conn.close()
 
 
-def atualizar_produto(ean, **kwargs):
-    conn = criar_conexao()
-    cursor = conn.cursor()
+def atualizar_produto(ean, ean_novo=None, **kwargs):
+    ean = (ean or "").strip()
+    novo_ean = (ean_novo or "").strip() or ean
     campos = []
     valores = []
     for key, val in kwargs.items():
@@ -156,23 +156,69 @@ def atualizar_produto(ean, **kwargs):
                                        "lote", "data_vencimento", "codigo_interno"):
             campos.append(f"{key} = ?")
             valores.append(val.strip() if isinstance(val, str) else val)
-    if not campos:
-        conn.close()
-        return False, "Nenhum campo para atualizar"
-    campos.append("updated_at = CURRENT_TIMESTAMP")
-    valores.append(ean)
+    if not ean or not novo_ean:
+        return False, "EAN inválido"
+
+    conn = criar_conexao()
+    cursor = conn.cursor()
     try:
-        cursor.execute(
-            f"UPDATE produtos SET {', '.join(campos)} WHERE ean = ?",
-            valores,
-        )
-        conn.commit()
-        conn.close()
-        return True, "Produto atualizado"
+        if ean != novo_ean:
+            cursor.execute("SELECT ean FROM produtos WHERE ean = ?", (novo_ean,))
+            if cursor.fetchone():
+                return False, f"Já existe outro produto com o EAN {novo_ean}"
+            cursor.execute(
+                """INSERT INTO produtos (ean, produto, marca, unidade_medida,
+                   base_especifica, instrucao_dosagem, lote, data_vencimento,
+                   codigo_interno, quantidade_estoque, created_at, updated_at)
+                   SELECT ?, produto, marca, unidade_medida,
+                   base_especifica, instrucao_dosagem, lote, data_vencimento,
+                   codigo_interno, quantidade_estoque, created_at, CURRENT_TIMESTAMP
+                   FROM produtos WHERE ean = ?""",
+                (novo_ean, ean),
+            )
+            if campos:
+                campos.append("updated_at = CURRENT_TIMESTAMP")
+                cursor.execute(
+                    f"UPDATE produtos SET {', '.join(campos)} WHERE ean = ?",
+                    valores + [novo_ean],
+                )
+            for tabela in ("inventario_contagem", "validacoes_base",
+                           "saidas_estoque", "itens_recebimento"):
+                cursor.execute(
+                    f"UPDATE {tabela} SET ean = ? WHERE ean = ?",
+                    (novo_ean, ean),
+                )
+            cursor.execute(
+                "UPDATE produto_codigos SET ean_produto = ? WHERE ean_produto = ?",
+                (novo_ean, ean),
+            )
+            cursor.execute("DELETE FROM produtos WHERE ean = ?", (ean,))
+            conn.commit()
+            msg = f"Produto atualizado (EAN: {ean} → {novo_ean})"
+        else:
+            if not campos:
+                return False, "Nenhum campo para atualizar"
+            campos.append("updated_at = CURRENT_TIMESTAMP")
+            valores.append(ean)
+            cursor.execute(
+                f"UPDATE produtos SET {', '.join(campos)} WHERE ean = ?",
+                valores,
+            )
+            conn.commit()
+            msg = "Produto atualizado"
+
+        # EAN antigo continua apontando para o produto (etiquetas antigas/planilha RT)
+        if ean != novo_ean:
+            try:
+                vincular_codigo(ean, novo_ean, origem="edicao")
+            except Exception:
+                pass
+        return True, msg
     except Exception as e:
         conn.rollback()
-        conn.close()
         return False, str(e)
+    finally:
+        conn.close()
 
 
 def registrar_contagem(ean, quantidade=1, sessao="", lote="", data_vencimento=""):

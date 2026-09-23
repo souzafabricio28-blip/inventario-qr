@@ -198,11 +198,13 @@ def api_criar_produto():
 @login_required
 @api_handler
 def api_atualizar_produto(ean):
-    data = request.json
-    sucesso, msg = atualizar_produto(ean, **{
+    data = request.json or {}
+    novo_ean = data.get("ean") or None
+    sucesso, msg = atualizar_produto(ean, ean_novo=novo_ean, **{
         k: v for k, v in data.items()
-        if k in ("produto", "marca", "unidade_medida", "base_especifica",
-                 "instrucao_dosagem", "lote", "data_vencimento", "codigo_interno")
+        if k in ("produto", "marca", "unidade_medida",
+                 "base_especifica", "instrucao_dosagem", "lote",
+                 "data_vencimento", "codigo_interno")
     })
     return jsonify({"sucesso": sucesso, "msg": msg})
 
