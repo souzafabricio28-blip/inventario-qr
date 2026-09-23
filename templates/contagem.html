@@ -101,18 +101,18 @@
         tbody.innerHTML = sorted.map(c => {
             const pend = (c.total_contado||0) === 0;
             return `
-            <tr class="hover:bg-gray-50 ${pend ? 'bg-amber-50' : ''}">
-                <td class="px-2 py-2 font-mono text-xs font-bold text-indigo-700">${c.codigo_omie || c.codigo_interno || c.ean}</td>
-                <td class="px-2 py-2 font-mono text-xs">${c.ean}</td>
-                <td class="px-2 py-2 font-medium">${c.produto}</td>
-                <td class="px-2 py-2 text-gray-600">${c.marca || '-'}</td>
-                <td class="px-2 py-2 font-mono text-xs">${c.lote || '-'}</td>
-                <td class="px-2 py-2 ${c.data_vencimento && c.data_vencimento < hoje ? 'text-red-600 font-bold' : ''}">${formatarData(c.data_vencimento)}</td>
-                <td class="px-2 py-2 text-center">${c.quantidade_estoque ?? 0}</td>
-                <td class="px-2 py-2 font-bold text-lg text-indigo-700 text-center">${c.total_contado || 0}</td>
+            <tr class="${pend ? 'bg-amber-100' : ''}" style="${pend ? '' : 'background:#f8fafc'}">
+                <td class="px-2 py-2 font-mono text-xs font-bold" style="color:#312e81">${c.codigo_omie || c.codigo_interno || c.ean}</td>
+                <td class="px-2 py-2 font-mono text-xs" style="color:#1e293b">${c.ean}</td>
+                <td class="px-2 py-2 font-medium" style="color:#0f172a">${c.produto}</td>
+                <td class="px-2 py-2" style="color:#334155">${c.marca || '-'}</td>
+                <td class="px-2 py-2 font-mono text-xs" style="color:#1e293b">${c.lote || '-'}</td>
+                <td class="px-2 py-2 ${c.data_vencimento && c.data_vencimento < hoje ? 'font-bold' : ''}" style="color:${c.data_vencimento && c.data_vencimento < hoje ? '#b91c1c' : '#1e293b'}">${formatarData(c.data_vencimento)}</td>
+                <td class="px-2 py-2 text-center" style="color:#1e293b">${c.quantidade_estoque ?? 0}</td>
+                <td class="px-2 py-2 font-bold text-lg text-center" style="color:#312e81">${c.total_contado || 0}</td>
                 <td class="px-2 py-2">${pend
-                    ? '<span class="text-amber-700 bg-amber-100 px-2 py-0.5 rounded text-xs">Pendente</span>'
-                    : '<span class="text-green-700 bg-green-100 px-2 py-0.5 rounded text-xs">Contado</span>'}</td>
+                    ? '<span style="color:#78350f;background:#fde68a" class="px-2 py-0.5 rounded text-xs font-semibold">Pendente</span>'
+                    : '<span style="color:#14532d;background:#bbf7d0" class="px-2 py-0.5 rounded text-xs font-semibold">Contado</span>'}</td>
             </tr>`;
         }).join('');
         document.getElementById('resumo_contagem').textContent =

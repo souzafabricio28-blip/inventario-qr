@@ -19,13 +19,40 @@
         body { font-family: 'Segoe UI', system-ui, sans-serif; transition: background 0.3s, color 0.3s; }
         body.dark { background: #111827; color: #f3f4f6; }
         body.dark .bg-white { background: #1f2937; }
-        body.dark .text-gray-600 { color: #9ca3af; }
-        body.dark .text-gray-500 { color: #9ca3af; }
+        body.dark .text-gray-600 { color: #d1d5db; }
+        body.dark .text-gray-500 { color: #d1d5db; }
+        body.dark .text-gray-400 { color: #9ca3af; }
         body.dark .bg-gray-50 { background: #374151; }
         body.dark .border { border-color: #4b5563; }
-        body.dark td, body.dark th { color: #e5e7eb; }
+        body.dark td, body.dark th { color: #f3f4f6; }
+        body.dark .text-indigo-700 { color: #a5b4fc !important; }
+        body.dark .text-indigo-800 { color: #c7d2fe !important; }
+        body.dark .text-green-600, body.dark .text-green-700 { color: #86efac !important; }
+        body.dark .text-red-600 { color: #fca5a5 !important; }
+        body.dark .text-amber-700 { color: #fcd34d !important; }
+        /* Fundos claros (amber/green/red-50) ficam ilegíveis com texto claro — forçar contraste */
+        body.dark .bg-amber-50,
+        body.dark .bg-amber-100,
+        body.dark .bg-green-50,
+        body.dark .bg-red-50,
+        body.dark .bg-yellow-50,
+        body.dark .bg-indigo-50 {
+            color: #111827 !important;
+        }
+        body.dark .bg-amber-50 td,
+        body.dark .bg-amber-50 th,
+        body.dark .bg-amber-50 .text-gray-600,
+        body.dark .bg-amber-50 .text-indigo-700,
+        body.dark .bg-green-50 td,
+        body.dark .bg-yellow-50 td,
+        body.dark .bg-indigo-50 td {
+            color: #111827 !important;
+        }
+        body.dark .bg-amber-50 { background: #fef3c7 !important; }
+        body.dark .hover\:bg-gray-50:hover { background: #374151 !important; }
         body.dark input, body.dark select, body.dark textarea { background: #374151; color: #f3f4f6; border-color: #6b7280; }
         body.dark input::placeholder { color: #9ca3af; }
+        body.dark .sortable:hover { background-color: #4b5563; }
 
         .ean-input { font-family: 'Courier New', monospace; font-size: 1.125rem; letter-spacing: 2px; }
         @media (max-width: 640px) { .ean-input { font-size: 1rem; padding-top: 2px; padding-bottom: 2px; } }
