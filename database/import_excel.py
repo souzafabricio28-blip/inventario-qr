@@ -143,38 +143,49 @@ def _norm_codigo_omie(val):
 
 
 def caminho_lista_rt_oficial():
-    """Caminhos possíveis da lista oficial usada no inventário da loja."""
-    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    docs = os.path.join(
-        os.path.expanduser("~"), "Documents",
-        "produtos omie 21092026", "lista_produtos_RToficial.xlsx",
-    )
-    return [
-        os.path.join(raiz, "data", "lista_produtos_RToficial.xlsx"),
-        docs,
-        os.path.join(raiz, "data", "lista_produtos_unica.xlsx"),
-    ]
+    """Compat: caminhos da lista RT oficial."""
+    from .rt_lista import caminho_lista_rt
+    p = caminho_lista_rt()
+    return [p] if p else []
 
 
-def sincronizar_rt_oficial(caminho_arquivo=None):
+
+def sincronizar_rt_oficial(caminho_arquivo=None, limpar_antigos=False):
     """
-    Importa/atualiza o cadastro a partir de lista_produtos_RToficial.xlsx.
-    Colunas esperadas: codigo, descricao, ean (e opcionalmente codigo_omie).
-    - ean = chave de bipagem (barras ou código da col. A)
-    - codigo_interno = código da loja/Omie (coluna A)
-    - aliases em produto_codigos para codigo e codigo_omie
+    Espelha a planilha RT oficial no banco operacional.
+    A planilha é a fonte única de catálogo (ean + codigo_omie).
+    limpar_antigos=True remove do banco produtos cujo ean não está na planilha.
     """
     from .backend import (
-        buscar_produto as _buscar,
         criar_produto as _criar,
         atualizar_produto as _atualizar,
         vincular_codigo,
+        excluir_produto_completo,
+        _buscar_produto_db,
+        _listar_produtos_db,
     )
+    from .rt_lista import carregar_lista_rt, chaves_oficiais, caminho_lista_rt
 
     if not caminho_arquivo:
-        caminho_arquivo = next((p for p in caminho_lista_rt_oficial() if os.path.exists(p)), None)
+        caminho_arquivo = caminho_lista_rt()
     if not caminho_arquivo or not os.path.exists(caminho_arquivo):
         return False, "Arquivo lista_produtos_RToficial.xlsx não encontrado"
+
+    # Copiar para data/ se veio de Documents (Vercel/local canônico)
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    dest = os.path.join(raiz, "data", "lista_produtos_RToficial.xlsx")
+    try:
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        if os.path.abspath(caminho_arquivo) != os.path.abspath(dest):
+            import shutil
+            shutil.copy2(caminho_arquivo, dest)
+            caminho_arquivo = dest
+    except Exception:
+        pass
+
+    ok_load, msg_load = carregar_lista_rt(force=True)
+    if not ok_load:
+        return False, msg_load
 
     try:
         wb = load_workbook(caminho_arquivo, read_only=True, data_only=True)
@@ -198,10 +209,10 @@ def sincronizar_rt_oficial(caminho_arquivo=None):
     i_ean = _idx("ean", "codigo_barras", "gtin")
     i_cod = _idx("codigo")
     i_desc = _idx("descricao", "produto", "nome")
-    i_omie = _idx("codigo_omie", "codigo_produto_omie")
+    i_omie = _idx("codigo_omie")
 
-    if i_ean is None and i_cod is None:
-        return False, f"Colunas ean/codigo não encontradas: {cabecalhos}"
+    if i_ean is None and i_cod is None and i_omie is None:
+        return False, f"Colunas ean/codigo_omie não encontradas: {cabecalhos}"
     if i_desc is None:
         return False, f"Coluna descricao não encontrada: {cabecalhos}"
 
@@ -222,12 +233,12 @@ def sincronizar_rt_oficial(caminho_arquivo=None):
         if not linha or all(v is None or str(v).strip() == "" for v in linha):
             continue
         codigo = _cell(linha, i_cod)
-        ean = _cell(linha, i_ean) or codigo
+        omie = _cell(linha, i_omie) or codigo
+        ean = _cell(linha, i_ean) or omie or codigo
         if not ean:
             continue
         descricao = _cell(linha, i_desc) or ean
-        omie = _cell(linha, i_omie)
-        codigo_interno = codigo or omie or ean
+        codigo_interno = omie or codigo or ean
 
         marca = ""
         nome = descricao
@@ -235,16 +246,10 @@ def sincronizar_rt_oficial(caminho_arquivo=None):
         if len(partes) > 1 and len(partes[0]) <= 20:
             marca, nome = partes[0], partes[1]
 
-        existente = None
-        for chave in (ean, codigo, omie):
-            if not chave:
-                continue
-            existente = _buscar(chave)
-            if existente:
-                break
-
-        if existente:
-            ean_alvo = existente["ean"]
+        # PK oficial = EAN da planilha (não o codigo_omie)
+        existente = _buscar_produto_db(ean)
+        if existente and (existente.get("ean") or "") == ean:
+            ean_alvo = ean
             mudou = (
                 (existente.get("produto") or "") != nome
                 or (existente.get("marca") or "") != marca
@@ -282,9 +287,25 @@ def sincronizar_rt_oficial(caminho_arquivo=None):
                 if ok_v:
                     aliases += 1
 
+    removidos = 0
+    if limpar_antigos:
+        eans_ok, _omies_ok = chaves_oficiais()
+        for p in _listar_produtos_db(""):
+            ean_p = (p.get("ean") or "").strip()
+            # Mantém só o que tem EAN igual ao da planilha (fonte oficial)
+            if ean_p and ean_p in eans_ok:
+                continue
+            try:
+                excluir_produto_completo(ean_p)
+                removidos += 1
+            except Exception:
+                erros += 1
+
+    carregar_lista_rt(force=True)
     return True, (
-        f"Lista RT sincronizada ({os.path.basename(caminho_arquivo)}): "
+        f"Catálogo RT oficial aplicado ({os.path.basename(caminho_arquivo)}): "
         f"{criados} novos, {atualizados} atualizados, {aliases} vínculos"
+        + (f", {removidos} antigos removidos" if removidos else "")
         + (f", {erros} erros" if erros else "")
     )
 

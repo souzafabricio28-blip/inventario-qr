@@ -1,4 +1,4 @@
-"""Índice em memória da lista RT oficial (ean + codigo_omie) para bipagem precisa."""
+"""Catálogo oficial = lista_produtos_RToficial.xlsx (fonte única de produtos)."""
 import os
 import re
 import time
@@ -10,10 +10,11 @@ _CACHE = {
     "by_ean": {},
     "by_omie": {},
     "by_codigo": {},
+    "itens": [],  # lista única
     "total": 0,
 }
 
-_TTL_SEGUNDOS = 300  # 5 min
+_TTL_SEGUNDOS = 60
 
 
 def _norm(val):
@@ -41,7 +42,11 @@ def caminho_lista_rt():
         ),
         os.path.join(raiz, "data", "lista_produtos_unica.xlsx"),
     ]
-    return next((p for p in candidatos if os.path.exists(p)), None)
+    existentes = [p for p in candidatos if os.path.exists(p)]
+    if not existentes:
+        return None
+    # Preferir a mais recente entre data/ e Documents
+    return max(existentes, key=lambda p: os.path.getmtime(p))
 
 
 def carregar_lista_rt(force=False):
@@ -50,7 +55,7 @@ def carregar_lista_rt(force=False):
     agora = time.time()
     if (
         not force
-        and _CACHE["by_ean"]
+        and _CACHE["itens"]
         and _CACHE["path"] == path
         and (agora - _CACHE["ts"]) < _TTL_SEGUNDOS
     ):
@@ -84,6 +89,7 @@ def carregar_lista_rt(force=False):
     i_desc = idx("descricao", "produto", "nome")
 
     by_ean, by_omie, by_codigo = {}, {}, {}
+    unicos = {}
 
     for linha in linhas[1:]:
         if not linha:
@@ -105,15 +111,19 @@ def carregar_lista_rt(force=False):
 
         item = {
             "ean": ean or omie or codigo,
-            "codigo_omie": omie or codigo,
-            "codigo": codigo or omie,
+            "codigo_omie": omie or codigo or ean,
+            "codigo": codigo or omie or ean,
             "descricao": descricao,
         }
+        chave = item["ean"] + "|" + item["codigo_omie"]
+        unicos[chave] = item
 
         for key, bucket in (
             (ean, by_ean),
             (omie, by_omie),
             (codigo, by_codigo),
+            (item["ean"], by_ean),
+            (item["codigo_omie"], by_omie),
         ):
             if key:
                 bucket[key] = item
@@ -121,21 +131,17 @@ def carregar_lista_rt(force=False):
                 if lim and lim not in bucket:
                     bucket[lim] = item
 
+    itens = sorted(unicos.values(), key=lambda x: (x["descricao"] or "").upper())
     _CACHE.update({
         "ts": agora,
         "path": path,
         "by_ean": by_ean,
         "by_omie": by_omie,
         "by_codigo": by_codigo,
-        "total": len({id(v) for v in list(by_ean.values()) + list(by_omie.values())}),
+        "itens": itens,
+        "total": len(itens),
     })
-    # total único por ean preferencial
-    unicos = {}
-    for it in list(by_ean.values()) + list(by_omie.values()) + list(by_codigo.values()):
-        unicos[it["ean"] + "|" + it["codigo_omie"]] = it
-    _CACHE["total"] = len(unicos)
-
-    return True, f"{_CACHE['total']} produtos indexados ({os.path.basename(path)})"
+    return True, f"{len(itens)} produtos indexados ({os.path.basename(path)})"
 
 
 def status_lista_rt():
@@ -151,10 +157,7 @@ def status_lista_rt():
 
 
 def resolver_na_planilha(codigo_lido):
-    """
-    Resolve bipagem pela planilha: tenta EAN e depois codigo_omie (e codigo).
-    Retorna dict {ean, codigo_omie, codigo, descricao} ou None.
-    """
+    """Resolve por ean, codigo_omie ou codigo na planilha RT."""
     codigo = _norm(codigo_lido)
     if not codigo:
         return None
@@ -166,9 +169,68 @@ def resolver_na_planilha(codigo_lido):
         lim = _limpo(codigo)
         if lim and lim in bucket:
             return bucket[lim]
-        # sem zeros à esquerda (EAN)
         if codigo.isdigit():
             sem = codigo.lstrip("0")
             if sem and sem in bucket:
                 return bucket[sem]
     return None
+
+
+def item_para_produto(item):
+    """Converte linha da planilha para o formato da tabela produtos."""
+    desc = item.get("descricao") or ""
+    marca = ""
+    nome = desc
+    partes = desc.split(" ", 1)
+    if len(partes) > 1 and len(partes[0]) <= 20:
+        marca, nome = partes[0], partes[1]
+    ean = item.get("ean") or item.get("codigo_omie") or item.get("codigo")
+    return {
+        "ean": ean,
+        "produto": nome or desc or ean,
+        "marca": marca,
+        "unidade_medida": "UN",
+        "base_especifica": "",
+        "instrucao_dosagem": "",
+        "lote": "",
+        "data_vencimento": "",
+        "codigo_interno": item.get("codigo_omie") or item.get("codigo") or ean,
+        "quantidade_estoque": 0,
+        "fonte": "rt_oficial",
+    }
+
+
+def listar_como_produtos(search=""):
+    """Lista o catálogo oficial (planilha) no formato de produtos do sistema."""
+    carregar_lista_rt(force=False)
+    itens = _CACHE.get("itens") or []
+    q = (search or "").strip().upper()
+    out = []
+    for item in itens:
+        p = item_para_produto(item)
+        if q:
+            blob = " ".join([
+                p.get("ean") or "",
+                p.get("codigo_interno") or "",
+                p.get("produto") or "",
+                p.get("marca") or "",
+                item.get("codigo") or "",
+            ]).upper()
+            if q not in blob:
+                continue
+        out.append(p)
+    return out
+
+
+def chaves_oficiais():
+    """Conjuntos de ean e codigo_omie presentes na planilha."""
+    carregar_lista_rt(force=False)
+    eans, omies = set(), set()
+    for item in _CACHE.get("itens") or []:
+        if item.get("ean"):
+            eans.add(item["ean"])
+        if item.get("codigo_omie"):
+            omies.add(item["codigo_omie"])
+        if item.get("codigo"):
+            omies.add(item["codigo"])
+    return eans, omies

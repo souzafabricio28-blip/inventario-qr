@@ -2,21 +2,29 @@
 {% block title %}Produtos - Inventário QR{% endblock %}
 {% block content %}
 <div class="bg-white rounded-xl shadow-md p-6">
-    <div class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-bold"><i class="fas fa-boxes text-green-600"></i> Produtos</h2>
-        <button onclick="abrirCadastro()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">
-            <i class="fas fa-plus"></i> Novo
-        </button>
+    <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+        <div>
+            <h2 class="text-2xl font-bold"><i class="fas fa-boxes text-green-600"></i> Produtos</h2>
+            <p class="text-sm text-gray-500 mt-1">Catálogo oficial: <b>lista_produtos_RToficial.xlsx</b> (ean + codigo_omie)</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <button onclick="atualizarCatalogoRT()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-sm">
+                <i class="fas fa-sync-alt"></i> Atualizar da planilha RT
+            </button>
+            <button onclick="abrirCadastro()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">
+                <i class="fas fa-plus"></i> Novo
+            </button>
+        </div>
     </div>
     <div class="mb-4">
-        <input type="text" id="search" placeholder="Buscar por EAN, nome ou marca..."
+        <input type="text" id="search" placeholder="Buscar por EAN, código Omie, nome ou marca..."
                class="w-full border rounded-lg px-4 py-2" onkeyup="carregarProdutos()">
     </div>
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
             <thead>
                 <tr class="bg-gray-50 text-left">
-                    <th class="px-2 py-2 sortable" onclick="ordenar(0)">Cód. Interno</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(0)">Cód. Omie</th>
                     <th class="px-2 py-2 sortable" onclick="ordenar(1)">EAN</th>
                     <th class="px-2 py-2 sortable" onclick="ordenar(2)">Produto</th>
                     <th class="px-2 py-2 sortable" onclick="ordenar(3)">Marca</th>
@@ -89,15 +97,32 @@
 
     async function carregarProdutos() {
         const search = document.getElementById('search').value;
-        const r = await fetch(`/api/produtos?search=${encodeURIComponent(search)}`);
+        const r = await fetch(`/api/produtos?search=${encodeURIComponent(search)}`, { cache: 'no-store' });
         produtos = await r.json();
         renderTabela();
     }
 
+    async function atualizarCatalogoRT() {
+        mostrarToast('Atualizando catálogo da planilha RT…', 'sucesso');
+        try {
+            const r = await fetch('/api/rt/sincronizar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ force: true }),
+            });
+            const data = await r.json();
+            mostrarToast(data.msg || (data.sucesso ? 'Catálogo atualizado' : 'Falha'), data.sucesso ? 'sucesso' : 'erro');
+            await carregarProdutos();
+        } catch (e) {
+            mostrarToast('Erro: ' + e, 'erro');
+        }
+    }
+
     function renderTabela() {
         const tbody = document.getElementById('tabela_produtos');
+        const hoje = new Date().toISOString().slice(0, 10);
         if (produtos.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-gray-400">Nenhum produto</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Nenhum produto na planilha RT</td></tr>';
             document.getElementById('total_produtos').textContent = '';
             return;
         }
@@ -114,14 +139,14 @@
                 <td class="px-2 py-2 font-medium">${p.produto}</td>
                 <td class="px-2 py-2 text-gray-600">${p.marca || '-'}</td>
                 <td class="px-2 py-2">${p.base_especifica || '-'}</td>
-                <td class="px-2 py-2"><button onclick="verQR('${p.ean}')" class="text-indigo-600 hover:text-indigo-800"><i class="fas fa-qrcode"></i></button></td>
+                <td class="px-2 py-2"><button onclick="verQR('${String(p.ean).replace(/'/g, "\\'")}')" class="text-indigo-600 hover:text-indigo-800"><i class="fas fa-qrcode"></i></button></td>
                 <td class="px-2 py-2 space-x-1">
-                    <button onclick="abrirEdicao('${p.ean}')" class="text-blue-600 hover:text-blue-800"><i class="fas fa-edit"></i></button>
-                    <button onclick="excluirProduto('${p.ean}')" class="text-red-600 hover:text-red-800"><i class="fas fa-trash"></i></button>
+                    <button onclick="abrirEdicao('${String(p.ean).replace(/'/g, "\\'")}')" class="text-blue-600 hover:text-blue-800"><i class="fas fa-edit"></i></button>
+                    <button onclick="excluirProduto('${String(p.ean).replace(/'/g, "\\'")}')" class="text-red-600 hover:text-red-800"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>
         `).join('');
-        document.getElementById('total_produtos').textContent = `${produtos.length} produto(s)`;
+        document.getElementById('total_produtos').textContent = `${produtos.length} produto(s) — planilha RT oficial`;
         document.querySelectorAll('.sortable').forEach((th, i) => {
             th.classList.toggle('asc', i === colOrdenacao && ordemAsc);
             th.classList.toggle('desc', i === colOrdenacao && !ordemAsc);

@@ -485,18 +485,23 @@ def api_rt_sincronizar():
     # Evita reimportar a cada abertura do Scanner (sync Neon é lento)
     agora = time.time()
     if not force and _RT_SYNC_CACHE["ok"] and (agora - _RT_SYNC_CACHE["ts"]) < 3600:
-        total = len(listar_produtos())
+        from database.rt_lista import status_lista_rt, carregar_lista_rt
+        carregar_lista_rt(force=False)
+        st = status_lista_rt()
         return jsonify({
             "sucesso": True,
-            "msg": _RT_SYNC_CACHE["msg"] or "Lista RT já sincronizada",
-            "total_produtos": total,
-            "arquivo": next((p for p in caminho_lista_rt_oficial() if os.path.exists(p)), None),
+            "msg": _RT_SYNC_CACHE["msg"] or "Catálogo RT já carregado",
+            "total_produtos": st.get("total") or len(listar_produtos()),
+            "arquivo": st.get("arquivo"),
             "cache": True,
         })
 
-    ok, msg = sincronizar_rt_oficial(caminho)
-    total = len(listar_produtos())
-    arquivo = next((p for p in caminho_lista_rt_oficial() if os.path.exists(p)), None)
+    ok, msg = sincronizar_rt_oficial(caminho, limpar_antigos=bool(force))
+    from database.rt_lista import carregar_lista_rt, status_lista_rt
+    carregar_lista_rt(force=True)
+    st = status_lista_rt()
+    total = st.get("total") or len(listar_produtos())
+    arquivo = st.get("arquivo")
     if ok:
         _RT_SYNC_CACHE.update({"ts": agora, "msg": msg, "ok": True})
     return jsonify({
@@ -1066,9 +1071,11 @@ def inject_nav():
 if not os.environ.get("SKIP_DB_INIT"):
     try:
         criar_tabelas()
+        from database.rt_lista import carregar_lista_rt
+        carregar_lista_rt(force=True)
     except Exception as e:
         import logging as _lg
-        _lg.getLogger("app").warning(f"Falha ao inicializar banco: {e}")
+        _lg.getLogger("app").warning(f"Falha ao inicializar banco/catálogo RT: {e}")
 
 
 if __name__ == "__main__":
