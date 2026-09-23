@@ -56,25 +56,26 @@
         const dados = await r.json();
         const tbody = document.getElementById('estoque-body');
         const vazio = document.getElementById('estoque-vazio');
+        const lista = Array.isArray(dados) ? dados : [];
 
-        if (dados.length === 0) {
+        if (lista.length === 0) {
             tbody.innerHTML = '';
             vazio.classList.remove('hidden');
-            return;
+        } else {
+            vazio.classList.add('hidden');
+            tbody.innerHTML = lista.map(p => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="p-2 font-mono text-xs">${p.ean}</td>
+                    <td class="p-2 font-medium">${p.produto || ''}</td>
+                    <td class="p-2 text-center font-bold ${p.quantidade_estoque > 0 ? 'text-indigo-600' : 'text-red-500'}">${p.quantidade_estoque || 0}</td>
+                    <td class="p-2 text-center text-xs ${p.lote ? 'text-gray-600' : 'text-gray-300'}">${p.lote || '-'}</td>
+                    <td class="p-2 text-center text-xs ${p.data_vencimento ? 'text-gray-600' : 'text-gray-300'}">${formatarData(p.data_vencimento) || '-'}</td>
+                </tr>
+            `).join('');
         }
-        vazio.classList.add('hidden');
-        tbody.innerHTML = dados.map(p => `
-            <tr class="border-b hover:bg-gray-50">
-                <td class="p-2 font-mono text-xs">${p.ean}</td>
-                <td class="p-2 font-medium">${p.produto || ''}</td>
-                <td class="p-2 text-center font-bold ${p.quantidade_estoque > 0 ? 'text-indigo-600' : 'text-red-500'}">${p.quantidade_estoque || 0}</td>
-                <td class="p-2 text-center text-xs ${p.lote ? 'text-gray-600' : 'text-gray-300'}">${p.lote || '-'}</td>
-                <td class="p-2 text-center text-xs ${p.data_vencimento ? 'text-gray-600' : 'text-gray-300'}">${formatarData(p.data_vencimento) || '-'}</td>
-            </tr>
-        `).join('');
 
-        const total = dados.reduce((s, p) => s + (p.quantidade_estoque || 0), 0);
-        const comEstoque = dados.length;
+        const total = lista.reduce((s, p) => s + Number(p.quantidade_estoque || 0), 0);
+        const comEstoque = lista.filter(p => Number(p.quantidade_estoque || 0) > 0).length;
         document.getElementById('resumo-estoque').innerHTML = `
             <div class="bg-indigo-50 rounded-lg p-3">
                 <p class="text-2xl font-bold text-indigo-600">${total}</p>
@@ -85,7 +86,7 @@
                 <p class="text-xs text-gray-500">Produtos em estoque</p>
             </div>
             <div class="bg-yellow-50 rounded-lg p-3">
-                <p class="text-2xl font-bold text-yellow-600">${comEstoque > 0 ? (total / comEstoque).toFixed(1) : 0}</p>
+                <p class="text-2xl font-bold text-yellow-600">${comEstoque > 0 ? (total / comEstoque).toFixed(1) : '0'}</p>
                 <p class="text-xs text-gray-500">Média por item</p>
             </div>
         `;
