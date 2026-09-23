@@ -27,6 +27,7 @@ from database.backend import (
     qtd_contagem_sessao, vincular_codigo,
     definir_contagem_sessao, excluir_contagem_sessao,
     aplicar_contagem_como_estoque, zerar_contagens,
+    sessao_mais_ativa,
 )
 from database.import_excel import importar_excel, sincronizar_omie, sincronizar_rt_oficial, caminho_lista_rt_oficial
 from qrcode_gen.generator import gerar_qrcode_base64, gerar_qrcode
@@ -346,6 +347,61 @@ def api_scanner_bip():
     if not str(codigo).strip():
         return jsonify({"encontrado": False, "msg": "Código vazio"}), 400
     return jsonify(_processar_bip(codigo, sessao))
+
+
+@app.route("/api/scanner/live")
+@login_required
+@api_handler
+def api_scanner_live():
+    """Estado ao vivo da sessão (PC acompanha bip do celular)."""
+    sessao = (request.args.get("sessao") or "").strip()
+    seguir = request.args.get("seguir", "1") in ("1", "true", "True", "yes")
+    if seguir or not sessao:
+        ativa = sessao_mais_ativa()
+        if ativa:
+            sessao = ativa
+    if not sessao:
+        return jsonify({
+            "sucesso": True, "sessao": "", "sig": "vazio",
+            "total": 0, "itens": 0, "ultimo": None,
+        })
+
+    contagens = get_contagens(sessao, cruzar=False)
+    ativos = [c for c in contagens if int(c.get("total_contado") or 0) > 0]
+    total = sum(int(c.get("total_contado") or 0) for c in ativos)
+    ultimo = None
+    if ativos:
+        ultimo = max(ativos, key=lambda c: str(c.get("ultima_leitura") or ""))
+
+    ult_ean = (ultimo or {}).get("ean") or ""
+    ult_qtd = (ultimo or {}).get("total_contado") or 0
+    ult_ts = (ultimo or {}).get("ultima_leitura") or ""
+    sig = f"{sessao}|{total}|{len(ativos)}|{ult_ean}|{ult_qtd}|{ult_ts}"
+
+    ultimo_payload = None
+    if ultimo:
+        ultimo_payload = {
+            "ean": ultimo.get("ean"),
+            "produto": ultimo.get("produto"),
+            "marca": ultimo.get("marca"),
+            "codigo_omie": ultimo.get("codigo_omie") or ultimo.get("codigo_interno"),
+            "codigo_interno": ultimo.get("codigo_interno"),
+            "qtd_sessao": ultimo.get("total_contado"),
+            "incremento": 1,
+            "lote": ultimo.get("lote") or "",
+            "data_vencimento": ultimo.get("data_vencimento") or "",
+            "ultima_leitura": ultimo.get("ultima_leitura"),
+            "vencido": False,
+        }
+
+    return jsonify({
+        "sucesso": True,
+        "sessao": sessao,
+        "sig": sig,
+        "total": total,
+        "itens": len(ativos),
+        "ultimo": ultimo_payload,
+    })
 
 
 @app.route("/api/scanner/<path:ean>")

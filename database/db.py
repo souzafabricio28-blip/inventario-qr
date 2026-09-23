@@ -440,6 +440,27 @@ def sessao_esta_aberta(nome):
     return row["status"] == "aberta"
 
 
+def sessao_mais_ativa():
+    """Sessão com leitura mais recente (aberta ou ainda sem registro formal)."""
+    conn = criar_conexao()
+    cursor = conn.cursor()
+    cursor.execute(
+        """SELECT i.sessao AS nome
+           FROM inventario_contagem i
+           LEFT JOIN sessoes_inventario s ON s.nome = i.sessao
+           WHERE COALESCE(i.sessao, '') != ''
+             AND (s.status = 'aberta' OR s.id IS NULL)
+           GROUP BY i.sessao
+           ORDER BY MAX(i.data_hora) DESC
+           LIMIT 1"""
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return ""
+    return row["nome"] or ""
+
+
 def listar_sessoes():
     conn = criar_conexao()
     cursor = conn.cursor()

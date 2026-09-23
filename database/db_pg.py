@@ -390,6 +390,24 @@ def sessao_esta_aberta(nome):
     return (row["status"] if isinstance(row, dict) else row[0]) == "aberta"
 
 
+def sessao_mais_ativa():
+    """Sessão com leitura mais recente (aberta ou ainda sem registro formal)."""
+    with get_db() as conn:
+        cur = _exec(conn,
+            """SELECT i.sessao AS nome
+               FROM inventario_contagem i
+               LEFT JOIN sessoes_inventario s ON s.nome = i.sessao
+               WHERE COALESCE(i.sessao, '') <> ''
+                 AND (s.status = 'aberta' OR s.id IS NULL)
+               GROUP BY i.sessao
+               ORDER BY MAX(i.data_hora) DESC
+               LIMIT 1""")
+        row = cur.fetchone()
+    if not row:
+        return ""
+    return (row["nome"] if isinstance(row, dict) else row[0]) or ""
+
+
 def listar_sessoes():
     with get_db() as conn:
         cur = _exec(conn,

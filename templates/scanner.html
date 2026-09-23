@@ -26,6 +26,9 @@
             <span id="contador" class="text-sm bg-green-100 text-green-800 px-3 py-1 rounded-full">0 leituras</span>
             <span id="itens_unicos" class="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full">0 itens</span>
             <span id="rt_status" class="text-sm bg-amber-100 text-amber-800 px-3 py-1 rounded-full">Lista RT…</span>
+            <span id="live_badge" class="text-sm bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full hidden">
+                <i class="fas fa-circle text-[8px] align-middle animate-pulse"></i> Ao vivo
+            </span>
         </div>
         <div class="flex gap-2">
             <input type="text" id="ean_input" autofocus
@@ -196,6 +199,7 @@
 
     async function processarLeitura(ean, opts) {
         opts = opts || {};
+        _localScanAt = Date.now();
         if (!(await garantirSessao())) return;
 
         // Feedback imediato na câmera (não espera rede)
@@ -274,6 +278,8 @@
         }
         atualizarContador();
         document.getElementById('sessao_display').textContent = `Sessão: ${sessaoAtual}`;
+        // Sincroniza assinatura ao vivo (PC/celular)
+        setTimeout(() => { _liveSig = ''; }, 300);
     }
 
     function mostrarResultadoProduto(p, data) {
@@ -501,6 +507,68 @@
         document.getElementById('contador').textContent = `${totalLeituras} leituras`;
     }
 
+    // ── Ao vivo no PC: acompanha bip do celular ──
+    let _liveSig = '';
+    let _livePoll = null;
+    let _localScanAt = 0;
+    let _liveBusy = false;
+
+    async function atualizarLive() {
+        if (_liveBusy) return;
+        try {
+            if (typeof _cameraContinua !== 'undefined' && _cameraContinua) return;
+        } catch (_) {}
+        _liveBusy = true;
+        try {
+            const r = await fetch('/api/scanner/live?seguir=1', { cache: 'no-store' });
+            const d = await r.json();
+            if (!d || d.sig == null) return;
+
+            if (d.sessao && d.sessao !== sessaoAtual) {
+                sessaoAtual = d.sessao;
+                localStorage.setItem('sessao_atual', sessaoAtual);
+                const sd = document.getElementById('sessao_display');
+                if (sd) sd.textContent = `Sessão: ${sessaoAtual}`;
+            }
+
+            const badge = document.getElementById('live_badge');
+            if (badge) badge.classList.remove('hidden');
+
+            if (d.sig === _liveSig) return;
+            const primeira = !_liveSig;
+            _liveSig = d.sig;
+
+            totalLeituras = d.total || 0;
+            atualizarContador();
+            const iu = document.getElementById('itens_unicos');
+            if (iu) iu.textContent = `${d.itens || 0} itens`;
+
+            await carregarResumoSessao();
+
+            if (d.ultimo && d.ultimo.ean) {
+                const p = {
+                    ean: d.ultimo.ean,
+                    produto: d.ultimo.produto,
+                    marca: d.ultimo.marca,
+                    codigo_interno: d.ultimo.codigo_interno || d.ultimo.codigo_omie,
+                };
+                mostrarResultadoProduto(p, d.ultimo);
+                if (!primeira && (Date.now() - _localScanAt) > 1800) {
+                    if (typeof beep === 'function') beep('ok');
+                }
+            }
+        } catch (_) {
+        } finally {
+            _liveBusy = false;
+        }
+    }
+
+    function iniciarLivePC() {
+        if (_livePoll) return;
+        atualizarLive();
+        _livePoll = setInterval(atualizarLive, 1000);
+    }
+
     window.processarLeitura = processarLeitura;
 
     (async function initScanner() {
@@ -510,6 +578,7 @@
             document.getElementById('sessao_display').textContent = `Sessão: ${sessaoAtual}`;
             carregarResumoSessao();
         }
+        iniciarLivePC();
         document.getElementById('ean_input').focus();
     })();
 </script>
