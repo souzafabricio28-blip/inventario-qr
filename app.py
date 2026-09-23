@@ -321,23 +321,79 @@ def api_omie_sincronizar():
     return jsonify({"sucesso": ok, "msg": msg}), (200 if ok else 400)
 
 
+@app.route("/api/rt/status")
+@login_required
+@api_handler
+def api_rt_status():
+    """Status rápido da lista RT (não reimporta a planilha)."""
+    total = len(listar_produtos())
+    arquivo = next((p for p in caminho_lista_rt_oficial() if os.path.exists(p)), None)
+    return jsonify({
+        "sucesso": True,
+        "total_produtos": total,
+        "arquivo": arquivo,
+        "pronto": total > 0,
+        "msg": f"{total} produtos no cadastro" if total else "Cadastro vazio — clique em Atualizar lista RT",
+    })
+
+
+_RT_SYNC_CACHE = {"ts": 0, "msg": "", "ok": False}
+
+
 @app.route("/api/rt/sincronizar", methods=["POST", "GET"])
 @login_required
 @api_handler
 def api_rt_sincronizar():
     """Sincroniza cadastro com lista_produtos_RToficial.xlsx (Documents ou data/)."""
+    import time
+    force = False
     caminho = None
-    if request.method == "POST" and request.json:
-        caminho = (request.json or {}).get("caminho") or None
+    if request.method == "POST" and request.is_json:
+        body = request.json or {}
+        caminho = body.get("caminho") or None
+        force = bool(body.get("force"))
+    force = force or request.args.get("force") in ("1", "true", "True")
+
+    # Evita reimportar a cada abertura do Scanner (sync Neon é lento)
+    agora = time.time()
+    if not force and _RT_SYNC_CACHE["ok"] and (agora - _RT_SYNC_CACHE["ts"]) < 3600:
+        total = len(listar_produtos())
+        return jsonify({
+            "sucesso": True,
+            "msg": _RT_SYNC_CACHE["msg"] or "Lista RT já sincronizada",
+            "total_produtos": total,
+            "arquivo": next((p for p in caminho_lista_rt_oficial() if os.path.exists(p)), None),
+            "cache": True,
+        })
+
     ok, msg = sincronizar_rt_oficial(caminho)
     total = len(listar_produtos())
     arquivo = next((p for p in caminho_lista_rt_oficial() if os.path.exists(p)), None)
+    if ok:
+        _RT_SYNC_CACHE.update({"ts": agora, "msg": msg, "ok": True})
     return jsonify({
         "sucesso": ok,
         "msg": msg,
         "total_produtos": total,
         "arquivo": arquivo,
+        "cache": False,
     }), (200 if ok else 400)
+
+
+@app.route("/api/rede")
+@login_required
+@api_handler
+def api_rede():
+    """IP da rede local para acessar de outros PCs."""
+    from utils.network import obter_ip_rede
+    ip = obter_ip_rede()
+    porta = int(os.environ.get("PORT", 5000))
+    return jsonify({
+        "ip": ip,
+        "porta": porta,
+        "url_local": f"http://{ip}:{porta}",
+        "url_vercel": "https://inventario-qr-beta.vercel.app",
+    })
 
 
 @app.route("/contagem")

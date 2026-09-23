@@ -6,6 +6,7 @@
         <div>
             <h2 class="text-2xl font-bold"><i class="fas fa-qrcode text-blue-600"></i> Inventário — Scanner</h2>
             <p class="text-gray-600 mt-1">Bipe o EAN/código. O sistema cruza com a <b>lista RT oficial</b> e soma a quantidade na sessão.</p>
+            <p id="acesso_rede" class="text-xs text-gray-500 mt-1"></p>
         </div>
         <div class="flex flex-wrap gap-2">
             <button type="button" onclick="sincronizarListaRT()" class="bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700 text-sm">
@@ -110,11 +111,40 @@
         return false;
     }
 
+    async function carregarStatusRT() {
+        const badge = document.getElementById('rt_status');
+        try {
+            const r = await fetch('/api/rt/status', { cache: 'no-store' });
+            const data = await r.json();
+            if (data.sucesso && data.total_produtos > 0) {
+                rtSincronizado = true;
+                badge.textContent = `${data.total_produtos} produtos na lista RT`;
+                badge.className = 'text-sm bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full';
+            } else {
+                badge.textContent = 'Lista vazia — clique Atualizar lista RT';
+                badge.className = 'text-sm bg-amber-100 text-amber-800 px-3 py-1 rounded-full';
+            }
+        } catch (err) {
+            badge.textContent = 'Cadastro disponível para bipagem';
+            badge.className = 'text-sm bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full';
+            rtSincronizado = true;
+        }
+    }
+
     async function sincronizarListaRT(silent) {
         const badge = document.getElementById('rt_status');
         badge.textContent = 'Sincronizando lista RT…';
+        badge.className = 'text-sm bg-amber-100 text-amber-800 px-3 py-1 rounded-full';
         try {
-            const r = await fetch('/api/rt/sincronizar', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 180000);
+            const r = await fetch('/api/rt/sincronizar', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ force: !silent }),
+                signal: ctrl.signal,
+            });
+            clearTimeout(timer);
             const data = await r.json();
             if (data.sucesso) {
                 rtSincronizado = true;
@@ -127,10 +157,22 @@
                 if (!silent) mostrarToast(data.msg || 'Falha ao sincronizar RT', 'erro');
             }
         } catch (err) {
-            badge.textContent = 'Erro ao ler lista RT';
+            badge.textContent = 'Erro / demorou — tente Atualizar lista RT';
             badge.className = 'text-sm bg-red-100 text-red-800 px-3 py-1 rounded-full';
             if (!silent) mostrarToast('Erro: ' + err, 'erro');
         }
+    }
+
+    async function mostrarAcessoRede() {
+        try {
+            const r = await fetch('/api/rede');
+            const d = await r.json();
+            const el = document.getElementById('acesso_rede');
+            if (el && d.url_local) {
+                el.innerHTML = `Outros PCs na Wi‑Fi: <a class="underline font-mono" href="${d.url_local}" target="_blank">${d.url_local}</a>
+                    · Internet: <a class="underline font-mono" href="${d.url_vercel}" target="_blank">${d.url_vercel}</a>`;
+            }
+        } catch (_) {}
     }
 
     function salvarInventario() {
@@ -145,7 +187,6 @@
 
     async function processarLeitura(ean) {
         if (!(await garantirSessao())) return;
-        if (!rtSincronizado) await sincronizarListaRT(true);
 
         let data;
         try {
@@ -378,7 +419,8 @@
     }
 
     (async function initScanner() {
-        await sincronizarListaRT(true);
+        await carregarStatusRT();
+        mostrarAcessoRede();
         if (sessaoAtual) {
             document.getElementById('sessao_display').textContent = `Sessão: ${sessaoAtual}`;
             carregarResumoSessao();
