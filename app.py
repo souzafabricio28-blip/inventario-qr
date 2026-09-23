@@ -384,9 +384,70 @@ def pagina_scanner():
 @login_required
 @api_handler
 def api_contagem():
+    """Contagem sempre baseada na lista RT oficial (não usa cadastro antigo)."""
+    from database.rt_lista import carregar_lista_rt, listar_como_produtos, resolver_na_planilha
+
     sessao = request.args.get("sessao", "")
     cruzar = request.args.get("cruzar", "1") in ("1", "true", "True", "yes")
-    return jsonify(get_contagens(sessao, cruzar=cruzar))
+
+    carregar_lista_rt(force=False)
+    rt_produtos = listar_como_produtos("")
+    contados = get_contagens(sessao, cruzar=False)
+
+    # Indexa contagens por ean e por codigo_interno
+    por_chave = {}
+    for c in contados:
+        for k in (c.get("ean"), c.get("codigo_interno"), c.get("codigo_omie")):
+            if k:
+                por_chave[str(k).strip()] = c
+
+    if cruzar:
+        resultado = []
+        vistos = set()
+        for p in rt_produtos:
+            ean = (p.get("ean") or "").strip()
+            omie = (p.get("codigo_interno") or "").strip()
+            c = por_chave.get(ean) or por_chave.get(omie)
+            qtd = int((c or {}).get("total_contado") or 0)
+            chave = ean or omie
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            resultado.append({
+                "ean": ean,
+                "codigo_omie": omie or ean,
+                "codigo_interno": omie or ean,
+                "produto": p.get("produto") or "",
+                "marca": p.get("marca") or "",
+                "base_especifica": "",
+                "lote": (c or {}).get("lote") or p.get("lote") or "",
+                "data_vencimento": (c or {}).get("data_vencimento") or p.get("data_vencimento") or "",
+                "quantidade_estoque": (c or {}).get("quantidade_estoque") or 0,
+                "total_contado": qtd,
+                "ultima_leitura": (c or {}).get("ultima_leitura"),
+                "status": "contado" if qtd > 0 else "pendente",
+            })
+        # Estoque real do banco para os que existem
+        try:
+            from database.backend import _listar_produtos_db, _buscar_produto_db
+            for row in resultado:
+                dbp = _buscar_produto_db(row["ean"]) or _buscar_produto_db(row["codigo_omie"])
+                if dbp:
+                    row["quantidade_estoque"] = float(dbp.get("quantidade_estoque") or 0)
+        except Exception:
+            pass
+        return jsonify(resultado)
+
+    # Sem cruzar: só itens contados que existem na lista RT
+    resultado = []
+    for c in contados:
+        if int(c.get("total_contado") or 0) <= 0:
+            continue
+        if not resolver_na_planilha(c.get("ean") or "") and not resolver_na_planilha(c.get("codigo_interno") or ""):
+            continue
+        c["status"] = "contado"
+        resultado.append(c)
+    return jsonify(resultado)
 
 
 @app.route("/api/contagem/item", methods=["PUT", "POST"])
