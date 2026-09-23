@@ -14,10 +14,10 @@
                         class="bg-red-600 text-white px-4 py-2 rounded-lg font-bold">
                     <i class="fas fa-search"></i>
                 </button>
-                <label class="bg-indigo-600 text-white px-3 py-2 rounded-lg cursor-pointer text-center min-w-[44px]" title="Tirar foto">
-                    <i class="fas fa-camera"></i>
-                    <input type="file" accept="image/*" capture="environment" class="hidden" onchange="escanearFoto(event)">
-                </label>
+                <button type="button" onclick="iniciarCameraAoVivo()"
+                        class="bg-indigo-600 text-white px-3 py-2 rounded-lg text-center min-w-[44px]" title="Bipar com câmera">
+                    <i class="fas fa-barcode"></i>
+                </button>
             </div>
             <div id="produto-info" class="hidden bg-white rounded-lg p-3 border border-gray-200">
                 <div class="flex justify-between items-start mb-2">
@@ -120,6 +120,7 @@
         document.getElementById('produto-info').classList.remove('hidden');
         document.getElementById('ean_input').value = '';
     }
+    window.buscarProduto = buscarProduto;
 
     async function registrarSaida() {
         const ean = ultimoEan;

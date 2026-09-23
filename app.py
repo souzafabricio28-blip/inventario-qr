@@ -1039,12 +1039,17 @@ def _obter_ip_rede():
 @login_required
 @api_handler
 def api_qr_conexao():
-    vercel_url = os.environ.get("VERCEL_URL", "")
-    if vercel_url:
-        url = f"https://{vercel_url}"
+    # Preferir HTTPS público: no celular a câmera/leitura exige contexto seguro.
+    public = (os.environ.get("PUBLIC_APP_URL") or "").strip()
+    vercel_url = (os.environ.get("VERCEL_URL") or "").strip()
+    if public:
+        url = public if public.startswith("http") else f"https://{public}"
+    elif vercel_url:
+        url = vercel_url if vercel_url.startswith("http") else f"https://{vercel_url}"
     else:
-        ipconfig = _obter_ip_rede()
-        url = f"http://{ipconfig}:5000/"
+        url = "https://inventario-qr-beta.vercel.app/"
+    if not url.endswith("/"):
+        url += "/"
     import qrcode, base64
     qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=12, border=2)
     qr.add_data(url)

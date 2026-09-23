@@ -81,16 +81,23 @@
         .camera-scanner-top { top: env(safe-area-inset-top, 0px); }
         main { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
-        /* Camera scanner overlay */
-        #camera-scanner { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 10000; }
-        #camera-scanner video { width: 100%; height: 100%; object-fit: cover; }
-        #camera-scanner .close-cam { position: absolute; top: 20px; right: 20px; background: rgba(255,0,0,0.7); color: #fff; border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 24px; cursor: pointer; z-index: 10001; }
-        #camera-scanner .cam-result { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 12px 24px; border-radius: 12px; font-size: 18px; font-family: monospace; }
+        /* Camera scanner overlay — bip contínuo */
+        #camera-scanner { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 10000; flex-direction: column; }
+        #camera-scanner.is-open { display: flex; }
+        #camera-viewport { flex: 1; min-height: 0; position: relative; }
+        #camera-viewport video { width: 100%; height: 100%; object-fit: cover; }
+        #camera-scanner .close-cam { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; background: rgba(220,38,38,0.9); color: #fff; border: none; border-radius: 50%; width: 52px; height: 52px; font-size: 22px; cursor: pointer; z-index: 10002; }
+        #camera-scanner .cam-hint { position: absolute; top: calc(16px + env(safe-area-inset-top, 0px)); left: 12px; right: 72px; color: #fff; font-size: 14px; font-weight: 600; text-shadow: 0 1px 4px #000; z-index: 10001; }
+        #camera-scanner .cam-result { position: absolute; bottom: calc(28px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); background: rgba(22,163,74,0.92); color: #fff; padding: 12px 20px; border-radius: 12px; font-size: 16px; font-family: monospace; z-index: 10001; max-width: 90%; text-align: center; }
+        #html5qr-dummy { display: none !important; width: 1px; height: 1px; overflow: hidden; }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body class="bg-gray-50 {% if tema_config == 'escuro' %}dark{% endif %}">
+    <div id="html5qr-dummy" aria-hidden="true"></div>
     <div id="camera-scanner">
-        <button class="close-cam" onclick="fecharCamera()"><i class="fas fa-times"></i></button>
+        <p class="cam-hint">Aponte para o código — bip contínuo (como leitor USB)</p>
+        <button class="close-cam" onclick="fecharCamera()" title="Fechar"><i class="fas fa-times"></i></button>
         <div id="camera-viewport"></div>
         <div id="cam-result" class="cam-result hidden"></div>
     </div>
@@ -103,8 +110,8 @@
                     <span class="font-bold text-base hidden sm:inline">Inventário QR</span>
                 </a>
                 <div class="flex items-center space-x-1">
-                    <button onclick="toggleCamera()" class="text-white hover:text-indigo-200 text-sm px-2" title="Escanear com câmera">
-                        <i class="fas fa-camera text-lg"></i>
+                    <button onclick="toggleCamera()" class="text-white hover:text-indigo-200 text-sm px-2" title="Bipar com câmera (ao vivo)">
+                        <i class="fas fa-barcode text-lg"></i>
                     </button>
                     <button onclick="toggleFullscreen()" class="text-white hover:text-indigo-200 text-sm px-2 hidden sm:inline" title="Tela cheia">
                         <i class="fas fa-expand text-lg"></i>
@@ -211,90 +218,235 @@
             mostrarToast(document.body.classList.contains('kiosk') ? 'Modo Kiosk ativado' : 'Modo normal', 'info');
         }
 
-        // Camera scanner (native capture for iPhone, stream for desktop)
+        // Câmera ao vivo = bip contínuo (igual leitor USB). Foto só como fallback sem HTTPS.
         let html5qr = null;
+        let _scanBusy = false;
+        let _cameraContinua = false;
+        let _lastScanCode = '';
+        let _lastScanAt = 0;
+        const SCAN_COOLDOWN_MS = 1600;
 
-        function toggleCamera() {
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-            if (isIOS) {
-                // iPhone: use native camera input (works on HTTP)
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = 'image/*';
-                input.capture = 'environment';
-                input.onchange = function(e) {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    mostrarToast('Processando imagem...', 'info');
-                    const qr = new Html5Qrcode("dummy");
-                    qr.scanFile(file, true)
-                        .then(result => {
-                            onScanSuccess(result.trim());
-                        })
-                        .catch(() => {
-                            mostrarToast('Não foi possível ler o código', 'erro');
-                        })
-                        .finally(() => { qr.clear(); });
-                    input.value = '';
-                };
-                input.click();
-                return;
-            }
-            // Desktop: use camera stream
-            const div = document.getElementById('camera-scanner');
-            if (div.style.display === 'block') { fecharCamera(); return; }
-            div.style.display = 'block';
-            document.getElementById('cam-result').classList.add('hidden');
-            if (typeof Html5Qrcode !== 'undefined') {
-                html5qr = new Html5Qrcode("camera-viewport");
-                html5qr.start({ facingMode: "environment" },
-                    { fps: 10, qrbox: { width: 250, height: 150 } },
-                    onScanSuccess
-                ).catch(err => {
-                    mostrarToast('Erro ao acessar câmera: '+err, 'erro');
-                    fecharCamera();
-                });
-            } else {
-                mostrarToast('Carregando...', 'info');
+        function isMobileDevice() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+                || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        }
+
+        function ensureHtml5Qrcode() {
+            return new Promise((resolve, reject) => {
+                if (typeof Html5Qrcode !== 'undefined') return resolve();
                 const script = document.createElement('script');
                 script.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
-                script.onload = () => {
-                    html5qr = new Html5Qrcode("camera-viewport");
-                    html5qr.start({ facingMode: "environment" },
-                        { fps: 10, qrbox: { width: 250, height: 150 } },
-                        onScanSuccess
-                    ).catch(err => {
-                        mostrarToast('Erro: '+err, 'erro');
-                        fecharCamera();
-                    });
-                };
+                script.onload = () => resolve();
+                script.onerror = () => reject(new Error('Falha ao carregar leitor de código'));
                 document.head.appendChild(script);
+            });
+        }
+
+        function formatosLeitura() {
+            try {
+                const F = Html5QrcodeSupportedFormats;
+                return [
+                    F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E,
+                    F.CODE_128, F.CODE_39, F.CODE_93, F.ITF,
+                    F.QR_CODE, F.DATA_MATRIX,
+                ];
+            } catch (_) {
+                return undefined;
+            }
+        }
+
+        function configCameraAoVivo() {
+            return {
+                fps: 15,
+                qrbox: function(w, h) {
+                    const boxW = Math.floor(Math.min(w * 0.92, 360));
+                    const boxH = Math.floor(Math.min(h * 0.32, 160));
+                    return { width: boxW, height: boxH };
+                },
+                aspectRatio: window.innerHeight > window.innerWidth ? 1.333 : 1.777,
+                disableFlip: false,
+                rememberLastUsedCamera: true,
+            };
+        }
+
+        function escanearViaArquivo() {
+            if (_scanBusy) return;
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.capture = 'environment';
+            input.onchange = async function(e) {
+                const file = e.target.files && e.target.files[0];
+                input.value = '';
+                if (!file) return;
+                _scanBusy = true;
+                mostrarToast('Processando imagem...', 'info');
+                try {
+                    await ensureHtml5Qrcode();
+                    const url = URL.createObjectURL(file);
+                    const qr = new Html5Qrcode('html5qr-dummy');
+                    const codigo = await qr.scanFile(file, true);
+                    try { qr.clear(); } catch (_) {}
+                    URL.revokeObjectURL(url);
+                    _cameraContinua = false;
+                    onScanSuccess(String(codigo).trim());
+                } catch (_) {
+                    mostrarToast('Não foi possível ler o código. Aproxime e tente de novo.', 'erro');
+                } finally {
+                    _scanBusy = false;
+                }
+            };
+            input.click();
+        }
+
+        async function iniciarCameraAoVivo() {
+            const div = document.getElementById('camera-scanner');
+            if (div.classList.contains('is-open')) { fecharCamera(); return; }
+
+            if (!window.isSecureContext) {
+                const dest = 'https://inventario-qr-beta.vercel.app/scanner';
+                mostrarToast('Câmera ao vivo só funciona em HTTPS. Abrindo o site correto…', 'aviso');
+                setTimeout(() => { window.location.href = dest; }, 1200);
+                return;
+            }
+
+            div.classList.add('is-open');
+            div.style.display = 'flex';
+            const camRes = document.getElementById('cam-result');
+            if (camRes) camRes.classList.add('hidden');
+            _cameraContinua = true;
+            _lastScanCode = '';
+            _lastScanAt = 0;
+
+            try {
+                await ensureHtml5Qrcode();
+                const viewport = document.getElementById('camera-viewport');
+                viewport.innerHTML = '';
+                html5qr = new Html5Qrcode('camera-viewport', { formatsToSupport: formatosLeitura(), verbose: false });
+
+                const cfg = configCameraAoVivo();
+                // iPhone: facingMode funciona; deviceId da lista costuma falhar
+                const tentativas = [
+                    { facingMode: 'environment' },
+                    { facingMode: { ideal: 'environment' } },
+                ];
+                let started = false;
+                let lastErr = null;
+                for (const cam of tentativas) {
+                    try {
+                        await html5qr.start(cam, cfg, onScanSuccess, () => {});
+                        started = true;
+                        break;
+                    } catch (e) {
+                        lastErr = e;
+                        try { await html5qr.stop(); } catch (_) {}
+                    }
+                }
+                if (!started) {
+                    const cameras = await Html5Qrcode.getCameras().catch(() => []);
+                    if (cameras && cameras.length) {
+                        const back = cameras.find(c => /back|traseira|rear|environment/i.test(c.label || ''))
+                            || cameras[cameras.length - 1];
+                        await html5qr.start(back.id, cfg, onScanSuccess, () => {});
+                        started = true;
+                    }
+                }
+                if (!started) throw lastErr || new Error('sem câmera');
+            } catch (err) {
+                console.error('camera', err);
+                fecharCamera();
+                mostrarToast('Permita o acesso à câmera no navegador (não precisa instalar app).', 'erro');
+            }
+        }
+
+        function toggleCamera() {
+            iniciarCameraAoVivo();
+        }
+        window.toggleCamera = toggleCamera;
+        window.fecharCamera = fecharCamera;
+        window.iniciarCameraAoVivo = iniciarCameraAoVivo;
+
+        function aplicarCodigoLido(ean) {
+            ean = (ean || '').trim();
+            if (!ean) return;
+            const path = window.location.pathname;
+            if (path === '/scanner') {
+                const input = document.getElementById('ean_input');
+                if (input) input.value = ean;
+                if (typeof window.processarLeitura === 'function') {
+                    window.processarLeitura(ean).finally(() => {
+                        if (input) { input.value = ''; }
+                    });
+                } else if (input) {
+                    input.dispatchEvent(new KeyboardEvent('keydown', {
+                        key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
+                    }));
+                }
+            } else if (path === '/recebimento') {
+                if (typeof window.conferirEAN === 'function') {
+                    window.conferirEAN(ean);
+                } else {
+                    const input = document.getElementById('ean_scan');
+                    if (input) {
+                        input.value = ean;
+                        input.dispatchEvent(new KeyboardEvent('keydown', {
+                            key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true
+                        }));
+                    }
+                }
+            } else if (path === '/saida') {
+                const input = document.getElementById('ean_input');
+                if (input) input.value = ean;
+                if (typeof window.buscarProduto === 'function') window.buscarProduto();
+            } else {
+                sessionStorage.setItem('scan_ean', ean);
+                window.location.href = '/scanner';
             }
         }
 
         function onScanSuccess(decodedText) {
-            fecharCamera();
-            const ean = decodedText.trim();
-            document.getElementById('cam-result').textContent = 'EAN: ' + ean;
-            document.getElementById('cam-result').classList.remove('hidden');
-            if (window.location.pathname === '/scanner') {
-                const input = document.getElementById('ean_input');
-                if (input) { input.value = ean; input.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter'})); }
-            } else if (window.location.pathname === '/recebimento') {
-                const input = document.getElementById('ean_scan');
-                if (input) { input.value = ean; input.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter'})); }
-            } else if (window.location.pathname === '/saida') {
-                const input = document.getElementById('ean_input');
-                if (input) { input.value = ean; buscarProduto(); }
+            const ean = String(decodedText || '').trim();
+            if (!ean) return;
+            const now = Date.now();
+            // Evita contar o mesmo código várias vezes enquanto aponta
+            if (ean === _lastScanCode && (now - _lastScanAt) < SCAN_COOLDOWN_MS) return;
+            _lastScanCode = ean;
+            _lastScanAt = now;
+
+            const camRes = document.getElementById('cam-result');
+            if (camRes) {
+                camRes.textContent = '✓ ' + ean;
+                camRes.classList.remove('hidden');
+                setTimeout(() => camRes.classList.add('hidden'), 900);
+            }
+            try { if (navigator.vibrate) navigator.vibrate(60); } catch (_) {}
+            // Som fica a cargo do processarLeitura / conferirEAN (evita bipe duplo)
+
+            if (_cameraContinua) {
+                // Mantém câmera aberta — próximo produto
+                aplicarCodigoLido(ean);
             } else {
-                window.location.href = '/scanner';
-                sessionStorage.setItem('scan_ean', ean);
+                fecharCamera();
+                aplicarCodigoLido(ean);
             }
         }
 
         function fecharCamera() {
-            document.getElementById('camera-scanner').style.display = 'none';
-            if (html5qr) { try { html5qr.stop(); html5qr.clear(); } catch(e) {} html5qr = null; }
+            _cameraContinua = false;
+            const div = document.getElementById('camera-scanner');
+            if (div) {
+                div.classList.remove('is-open');
+                div.style.display = 'none';
+            }
+            if (html5qr) {
+                const inst = html5qr;
+                html5qr = null;
+                try {
+                    inst.stop().then(() => { try { inst.clear(); } catch (_) {} }).catch(() => {
+                        try { inst.clear(); } catch (_) {}
+                    });
+                } catch (_) {}
+            }
         }
 
         // Mobile menu
@@ -331,14 +483,11 @@
             if (e.key === 'c' || e.key === 'C') toggleCamera();
         });
 
-        // Check for stored scan EAN
+        // Check for stored scan EAN (vindo da câmera em outra página)
         const scanEan = sessionStorage.getItem('scan_ean');
         if (scanEan && window.location.pathname === '/scanner') {
             sessionStorage.removeItem('scan_ean');
-            setTimeout(() => {
-                const input = document.getElementById('ean_input');
-                if (input) { input.value = scanEan; input.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter'})); }
-            }, 500);
+            setTimeout(() => aplicarCodigoLido(scanEan), 400);
         }
     </script>
     {% block scripts %}{% endblock %}

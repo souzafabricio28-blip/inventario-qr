@@ -27,9 +27,18 @@
             <span id="itens_unicos" class="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full">0 itens</span>
             <span id="rt_status" class="text-sm bg-amber-100 text-amber-800 px-3 py-1 rounded-full">Lista RT…</span>
         </div>
-        <input type="text" id="ean_input" autofocus
-               class="ean-input w-full border-2 border-blue-300 rounded-lg px-4 py-3 focus:border-blue-500 focus:outline-none"
-               placeholder="Leia o código de barras / QR...">
+        <div class="flex gap-2">
+            <input type="text" id="ean_input" autofocus
+                   class="ean-input flex-1 border-2 border-blue-300 rounded-lg px-4 py-3 focus:border-blue-500 focus:outline-none"
+                   placeholder="Leia o código de barras / QR...">
+            <button type="button" onclick="toggleCamera()"
+                    class="shrink-0 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 font-semibold"
+                    title="Abrir câmera em bip contínuo">
+                <i class="fas fa-barcode"></i>
+                <span class="hidden sm:inline ml-1">Bipar</span>
+            </button>
+        </div>
+        <p class="text-xs text-gray-500 mt-2 sm:hidden">Toque em <b>Bipar</b>: câmera fica aberta e conta cada código na hora (sem tirar foto). Use o site em HTTPS.</p>
     </div>
 
     <div id="ultimo_resultado" class="mb-4 hidden"></div>
@@ -470,6 +479,8 @@
     function atualizarContador() {
         document.getElementById('contador').textContent = `${totalLeituras} leituras`;
     }
+
+    window.processarLeitura = processarLeitura;
 
     (async function initScanner() {
         await carregarStatusRT();
