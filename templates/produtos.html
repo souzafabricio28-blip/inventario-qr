@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Produtos - Inventário QR{% endblock %}
+{% block content %}
+<div class="bg-white rounded-xl shadow-md p-6">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold"><i class="fas fa-boxes text-green-600"></i> Produtos</h2>
+        <button onclick="abrirCadastro()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">
+            <i class="fas fa-plus"></i> Novo
+        </button>
+    </div>
+    <div class="mb-4">
+        <input type="text" id="search" placeholder="Buscar por EAN, nome ou marca..."
+               class="w-full border rounded-lg px-4 py-2" onkeyup="carregarProdutos()">
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="bg-gray-50 text-left">
+                    <th class="px-2 py-2 sortable" onclick="ordenar(0)">Cód. Interno</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(1)">EAN</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(2)">Produto</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(3)">Marca</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(4)">Base</th>
+                    <th class="px-2 py-2">QR</th>
+                    <th class="px-2 py-2">Ações</th>
+                </tr>
+            </thead>
+            <tbody id="tabela_produtos" class="divide-y"></tbody>
+        </table>
+    </div>
+    <p id="total_produtos" class="text-sm text-gray-500 mt-2"></p>
+</div>
+
+<div id="modal_cadastro" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
+        <h3 class="text-xl font-bold mb-4" id="modal_titulo">Cadastrar Produto</h3>
+        <div class="space-y-3">
+            <input id="form_codigo_interno" placeholder="Código Interno (ID próprio)" class="w-full border rounded px-3 py-2">
+            <input id="form_ean" placeholder="EAN *" class="w-full border rounded px-3 py-2">
+            <input id="form_produto" placeholder="Nome do produto *" class="w-full border rounded px-3 py-2">
+            <input id="form_marca" placeholder="Marca" class="w-full border rounded px-3 py-2">
+            <input id="form_unidade" placeholder="Unidade (UN)" value="UN" class="w-full border rounded px-3 py-2">
+            <input id="form_base" placeholder="Base específica" class="w-full border rounded px-3 py-2">
+            <input id="form_dosagem" placeholder="Instrução de dosagem" class="w-full border rounded px-3 py-2">
+            <div class="grid grid-cols-2 gap-3">
+                <input id="form_lote" placeholder="Lote" class="w-full border rounded px-3 py-2">
+                <input id="form_vencimento" type="date" class="w-full border rounded px-3 py-2">
+            </div>
+        </div>
+        <div class="flex space-x-3 mt-4">
+            <button onclick="salvarProduto()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">
+                <i class="fas fa-save"></i> Salvar
+            </button>
+            <button onclick="fecharCadastro()" class="bg-gray-300 px-6 py-2 rounded-lg hover:bg-gray-400">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal_editar" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
+        <h3 class="text-xl font-bold mb-4">Editar Produto</h3>
+        <div class="space-y-3">
+            <input id="edit_codigo_interno" placeholder="Código Interno" class="w-full border rounded px-3 py-2">
+            <input id="edit_ean" class="w-full border rounded px-3 py-2 bg-gray-100" readonly>
+            <input id="edit_produto" placeholder="Nome" class="w-full border rounded px-3 py-2">
+            <input id="edit_marca" placeholder="Marca" class="w-full border rounded px-3 py-2">
+            <input id="edit_unidade" placeholder="Unidade" class="w-full border rounded px-3 py-2">
+            <input id="edit_base" placeholder="Base" class="w-full border rounded px-3 py-2">
+            <input id="edit_dosagem" placeholder="Dosagem" class="w-full border rounded px-3 py-2">
+            <div class="grid grid-cols-2 gap-3">
+                <input id="edit_lote" placeholder="Lote" class="w-full border rounded px-3 py-2">
+                <input id="edit_vencimento" type="date" class="w-full border rounded px-3 py-2">
+            </div>
+        </div>
+        <div class="flex space-x-3 mt-4">
+            <button onclick="salvarEdicao()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">
+                <i class="fas fa-save"></i> Salvar
+            </button>
+            <button onclick="fecharEdicao()" class="bg-gray-300 px-6 py-2 rounded-lg hover:bg-gray-400">Cancelar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    let produtos = [];
+    let colOrdenacao = 0;
+    let ordemAsc = true;
+
+    async function carregarProdutos() {
+        const search = document.getElementById('search').value;
+        const r = await fetch(`/api/produtos?search=${encodeURIComponent(search)}`);
+        produtos = await r.json();
+        renderTabela();
+    }
+
+    function renderTabela() {
+        const tbody = document.getElementById('tabela_produtos');
+        if (produtos.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-gray-400">Nenhum produto</td></tr>';
+            document.getElementById('total_produtos').textContent = '';
+            return;
+        }
+        const sorted = [...produtos].sort((a, b) => {
+            const keys = ['codigo_interno','ean','produto','marca','base_especifica','lote','data_vencimento','deposito'];
+            const va = (a[keys[colOrdenacao]] || '').toUpperCase();
+            const vb = (b[keys[colOrdenacao]] || '').toUpperCase();
+            return ordemAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+        });
+        tbody.innerHTML = sorted.map(p => `
+            <tr class="hover:bg-gray-50 ${p.data_vencimento && p.data_vencimento < hoje ? 'bg-red-50' : ''}">
+                <td class="px-2 py-2 font-bold text-xs">${p.codigo_interno || '-'}</td>
+                <td class="px-2 py-2 font-mono text-xs">${p.ean}</td>
+                <td class="px-2 py-2 font-medium">${p.produto}</td>
+                <td class="px-2 py-2 text-gray-600">${p.marca || '-'}</td>
+                <td class="px-2 py-2">${p.base_especifica || '-'}</td>
+                <td class="px-2 py-2"><button onclick="verQR('${p.ean}')" class="text-indigo-600 hover:text-indigo-800"><i class="fas fa-qrcode"></i></button></td>
+                <td class="px-2 py-2 space-x-1">
+                    <button onclick="abrirEdicao('${p.ean}')" class="text-blue-600 hover:text-blue-800"><i class="fas fa-edit"></i></button>
+                    <button onclick="excluirProduto('${p.ean}')" class="text-red-600 hover:text-red-800"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>
+        `).join('');
+        document.getElementById('total_produtos').textContent = `${produtos.length} produto(s)`;
+        document.querySelectorAll('.sortable').forEach((th, i) => {
+            th.classList.toggle('asc', i === colOrdenacao && ordemAsc);
+            th.classList.toggle('desc', i === colOrdenacao && !ordemAsc);
+        });
+    }
+
+    function ordenar(col) {
+        if (colOrdenacao === col) ordemAsc = !ordemAsc;
+        else { colOrdenacao = col; ordemAsc = true; }
+        renderTabela();
+    }
+
+    function verQR(ean) { window.open(`/api/produtos/${ean}`, '_blank'); }
+
+    // Cadastro
+    function abrirCadastro() {
+        document.getElementById('modal_titulo').textContent = 'Cadastrar Produto';
+        ['codigo_interno','ean','produto','marca','base','dosagem','lote'].forEach(id => document.getElementById('form_'+id).value = '');
+        document.getElementById('form_unidade').value = 'UN';
+        document.getElementById('form_vencimento').value = '';
+        document.getElementById('modal_cadastro').classList.remove('hidden');
+    }
+    function fecharCadastro() { document.getElementById('modal_cadastro').classList.add('hidden'); }
+    async function salvarProduto() {
+        const data = {
+            ean: document.getElementById('form_ean').value.trim(),
+            produto: document.getElementById('form_produto').value.trim(),
+            marca: document.getElementById('form_marca').value.trim(),
+            unidade_medida: document.getElementById('form_unidade').value.trim() || 'UN',
+            base_especifica: document.getElementById('form_base').value.trim(),
+            instrucao_dosagem: document.getElementById('form_dosagem').value.trim(),
+            lote: document.getElementById('form_lote').value.trim(),
+            data_vencimento: document.getElementById('form_vencimento').value,
+            codigo_interno: document.getElementById('form_codigo_interno').value.trim(),
+        };
+        if (!data.ean || !data.produto) return mostrarToast('EAN e Produto obrigatórios', 'erro');
+        const r = await fetch('/api/produtos', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+        const res = await r.json();
+        mostrarToast(res.msg, res.sucesso ? 'sucesso' : 'erro');
+        if (res.sucesso) { fecharCadastro(); carregarProdutos(); }
+    }
+
+    // Edição
+    async function abrirEdicao(ean) {
+        const r = await fetch(`/api/produtos/${ean}`);
+        const p = await r.json();
+        document.getElementById('edit_codigo_interno').value = p.codigo_interno || '';
+        document.getElementById('edit_ean').value = p.ean;
+        document.getElementById('edit_produto').value = p.produto;
+        document.getElementById('edit_marca').value = p.marca || '';
+        document.getElementById('edit_unidade').value = p.unidade_medida || 'UN';
+        document.getElementById('edit_base').value = p.base_especifica || '';
+        document.getElementById('edit_dosagem').value = p.instrucao_dosagem || '';
+        document.getElementById('edit_lote').value = p.lote || '';
+        document.getElementById('edit_vencimento').value = p.data_vencimento || '';
+        document.getElementById('modal_editar').classList.remove('hidden');
+    }
+    function fecharEdicao() { document.getElementById('modal_editar').classList.add('hidden'); }
+    async function salvarEdicao() {
+        const ean = document.getElementById('edit_ean').value;
+        const data = {
+            produto: document.getElementById('edit_produto').value.trim(),
+            marca: document.getElementById('edit_marca').value.trim(),
+            unidade_medida: document.getElementById('edit_unidade').value.trim() || 'UN',
+            base_especifica: document.getElementById('edit_base').value.trim(),
+            instrucao_dosagem: document.getElementById('edit_dosagem').value.trim(),
+            lote: document.getElementById('edit_lote').value.trim(),
+            data_vencimento: document.getElementById('edit_vencimento').value,
+            codigo_interno: document.getElementById('edit_codigo_interno').value.trim(),
+        };
+        const r = await fetch(`/api/produtos/${ean}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+        const res = await r.json();
+        mostrarToast(res.msg, res.sucesso ? 'sucesso' : 'erro');
+        if (res.sucesso) { fecharEdicao(); carregarProdutos(); }
+    }
+
+    // Exclusão
+    async function excluirProduto(ean) {
+        if (!confirm(`Excluir produto ${ean}?`)) return;
+        const r = await fetch(`/api/produtos/${ean}`, { method:'DELETE' });
+        const res = await r.json();
+        mostrarToast(res.msg, res.sucesso ? 'sucesso' : 'erro');
+        if (res.sucesso) carregarProdutos();
+    }
+
+    carregarProdutos();
+</script>
+{% endblock %}

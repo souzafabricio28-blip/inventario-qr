@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Validação de Base - Inventário QR{% endblock %}
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white rounded-xl shadow-md p-6">
+        <h2 class="text-2xl font-bold mb-4"><i class="fas fa-check-double text-red-600"></i> Validação de Base</h2>
+        <p class="text-gray-600 mb-4">Bipe o produto e informe a base coletada fisicamente para evitar erros de mistura.</p>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">EAN do Produto</label>
+                <input type="text" id="val_ean" autofocus
+                       class="ean-input w-full border-2 border-gray-300 rounded-lg px-4 py-3 focus:border-red-400 focus:outline-none"
+                       placeholder="Leia o código de barras...">
+            </div>
+            <div id="val_produto_info" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p><strong>Produto:</strong> <span id="val_nome"></span></p>
+                <p><strong>Marca:</strong> <span id="val_marca"></span></p>
+                <p><strong>Lote:</strong> <span id="val_lote"></span></p>
+                <p><strong>Vencimento:</strong> <span id="val_vencimento"></span></p>
+                <p><strong>Base Oficial:</strong> <span id="val_base_oficial" class="font-bold text-blue-700"></span></p>
+                <p><strong>Dosagem:</strong> <span id="val_dosagem"></span></p>
+            </div>
+            <div id="val_base_group" class="hidden">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Base Coletada Fisicamente</label>
+                <input type="text" id="val_base_informada"
+                       class="w-full border-2 border-gray-300 rounded-lg px-4 py-3 focus:border-red-400 focus:outline-none"
+                       placeholder="Digite a base que você coletou...">
+            </div>
+            <button id="btn_validar" onclick="validarBase()"
+                    class="hidden bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-bold text-lg w-full">
+                <i class="fas fa-shield-alt"></i> VALIDAR BASE
+            </button>
+        </div>
+
+        <div id="val_resultado" class="mt-4"></div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md p-6">
+        <h3 class="font-bold text-lg mb-4"><i class="fas fa-history"></i> Últimas Validações</h3>
+        <div id="historico_validacoes" class="space-y-2 max-h-96 overflow-y-auto"></div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    document.getElementById('val_ean').addEventListener('keydown', async function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const ean = this.value.trim();
+            if (!ean) return;
+
+            const r = await fetch(`/api/produtos/${ean}`);
+            if (r.status === 404) {
+                document.getElementById('val_produto_info').classList.add('hidden');
+                document.getElementById('val_base_group').classList.add('hidden');
+                document.getElementById('btn_validar').classList.add('hidden');
+                document.getElementById('val_resultado').innerHTML = `
+                    <div class="bg-red-100 border border-red-300 rounded-lg p-4">
+                        <i class="fas fa-exclamation-triangle text-red-600"></i>
+                        <strong>Produto não encontrado!</strong> Cadastre-o primeiro.
+                    </div>`;
+                return;
+            }
+
+            const produto = await r.json();
+            document.getElementById('val_nome').textContent = produto.produto;
+            document.getElementById('val_marca').textContent = produto.marca || '-';
+            document.getElementById('val_lote').textContent = produto.lote || '-';
+            document.getElementById('val_vencimento').textContent = formatarData(produto.data_vencimento) || '-';
+            document.getElementById('val_base_oficial').textContent = produto.base_especifica || 'NÃO CADASTRADA';
+            document.getElementById('val_dosagem').textContent = produto.instrucao_dosagem || '-';
+            document.getElementById('val_produto_info').classList.remove('hidden');
+            document.getElementById('val_base_group').classList.remove('hidden');
+            document.getElementById('btn_validar').classList.remove('hidden');
+            document.getElementById('val_base_informada').value = '';
+            document.getElementById('val_base_informada').focus();
+            document.getElementById('val_resultado').innerHTML = '';
+        }
+    });
+
+    document.getElementById('val_base_informada').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            validarBase();
+        }
+    });
+
+    async function validarBase() {
+        const ean = document.getElementById('val_ean').value.trim();
+        const base = document.getElementById('val_base_informada').value.trim();
+        if (!base) return alert('Informe a base coletada');
+
+        const r = await fetch('/api/validar', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ean, base_informada: base})
+        });
+        const resultado = await r.json();
+
+        const div = document.getElementById('val_resultado');
+        if (resultado.status === 'bloqueada') {
+            div.innerHTML = `
+                <div class="bg-red-100 border-4 border-red-600 rounded-lg p-6 text-center">
+                    <i class="fas fa-ban text-red-600 text-5xl mb-3"></i>
+                    <h3 class="text-2xl font-bold text-red-700">BLOQUEADO!</h3>
+                    <p class="text-red-600 mt-2">${resultado.mensagem}</p>
+                    <p class="text-sm text-red-500 mt-2">Base oficial: <strong>${resultado.base_oficial}</strong> |
+                    Base informada: <strong>${resultado.base_informada}</strong></p>
+                </div>`;
+        } else if (resultado.status === 'aprovada') {
+            div.innerHTML = `
+                <div class="bg-green-100 border-4 border-green-600 rounded-lg p-6 text-center">
+                    <i class="fas fa-check-circle text-green-600 text-5xl mb-3"></i>
+                    <h3 class="text-2xl font-bold text-green-700">APROVADO!</h3>
+                    <p class="text-green-600 mt-2">${resultado.mensagem}</p>
+                </div>`;
+        } else {
+            div.innerHTML = `
+                <div class="bg-yellow-100 border border-yellow-400 rounded-lg p-4">
+                    <i class="fas fa-info-circle text-yellow-600"></i>
+                    ${resultado.mensagem}
+                </div>`;
+        }
+
+        adicionarHistoricoValidacao(ean, resultado);
+        document.getElementById('val_ean').value = '';
+        document.getElementById('val_ean').focus();
+        document.getElementById('val_produto_info').classList.add('hidden');
+        document.getElementById('val_base_group').classList.add('hidden');
+        document.getElementById('btn_validar').classList.add('hidden');
+    }
+
+    function adicionarHistoricoValidacao(ean, resultado) {
+        const div = document.getElementById('historico_validacoes');
+        const cor = resultado.status === 'aprovada' ? 'green' : resultado.status === 'bloqueada' ? 'red' : 'yellow';
+        const el = document.createElement('div');
+        el.className = `border-l-4 border-${cor}-500 bg-${cor}-50 rounded p-3 text-sm`;
+        el.innerHTML = `
+            <div class="flex justify-between">
+                <span class="font-mono">${ean}</span>
+                <span class="font-bold text-${cor}-700">${resultado.status.toUpperCase()}</span>
+            </div>
+            <div class="text-gray-600 text-xs mt-1">${resultado.mensagem || ''}</div>
+        `;
+        div.prepend(el);
+    }
+</script>
+{% endblock %}

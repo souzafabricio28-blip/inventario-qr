@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Histórico de Validações - Inventário QR{% endblock %}
+{% block content %}
+<div class="bg-white rounded-xl shadow-md p-6">
+    <h2 class="text-2xl font-bold mb-4"><i class="fas fa-history text-indigo-600"></i> Histórico de Validações de Base</h2>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="bg-gray-50 text-left">
+                    <th class="px-3 py-2 sortable" onclick="ordenar(0)">Data/Hora</th>
+                    <th class="px-3 py-2 sortable" onclick="ordenar(1)">EAN</th>
+                    <th class="px-3 py-2 sortable" onclick="ordenar(2)">Produto</th>
+                    <th class="px-3 py-2 sortable" onclick="ordenar(3)">Base Oficial</th>
+                    <th class="px-3 py-2 sortable" onclick="ordenar(4)">Base Informada</th>
+                    <th class="px-3 py-2 sortable" onclick="ordenar(5)">Status</th>
+                </tr>
+            </thead>
+            <tbody id="tab-validacoes" class="divide-y"></tbody>
+        </table>
+    </div>
+    <p id="total-validacoes" class="text-sm text-gray-500 mt-2"></p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    let validacoes = [];
+    let colOrd = 0, ascOrd = false;
+
+    async function carregar() {
+        const r = await fetch('/api/validacoes');
+        validacoes = await r.json();
+        render();
+    }
+
+    function render() {
+        const keys = ['data_hora','ean','produto','base_oficial','base_informada','status'];
+        const sorted = [...validacoes].sort((a,b) => {
+            const va = (a[keys[colOrd]]||'').toString().toUpperCase();
+            const vb = (b[keys[colOrd]]||'').toString().toUpperCase();
+            return ascOrd ? va.localeCompare(vb) : vb.localeCompare(va);
+        });
+        document.getElementById('tab-validacoes').innerHTML = sorted.map(v => `
+            <tr class="hover:bg-gray-50">
+                <td class="px-3 py-2 text-xs">${v.data_hora}</td>
+                <td class="px-3 py-2 font-mono text-xs">${v.ean}</td>
+                <td class="px-3 py-2">${v.produto || '-'}</td>
+                <td class="px-3 py-2">${v.base_oficial}</td>
+                <td class="px-3 py-2">${v.base_informada}</td>
+                <td class="px-3 py-2"><span class="px-2 py-1 rounded-full text-xs font-bold ${v.status==='aprovada'?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}">${v.status.toUpperCase()}</span></td>
+            </tr>
+        `).join('');
+        document.getElementById('total-validacoes').textContent = `${sorted.length} registro(s)`;
+        document.querySelectorAll('.sortable').forEach((th,i) => {
+            th.classList.toggle('asc', i===colOrd && ascOrd);
+            th.classList.toggle('desc', i===colOrd && !ascOrd);
+        });
+    }
+
+    function ordenar(col) {
+        if (colOrd === col) ascOrd = !ascOrd;
+        else { colOrd = col; ascOrd = false; }
+        render();
+    }
+
+    carregar();
+</script>
+{% endblock %}

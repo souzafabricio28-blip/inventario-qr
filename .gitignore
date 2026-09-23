@@ -1,0 +1,45 @@
+# .env com credenciais (NUNCA commitar)
+.env
+.env.local
+
+# Banco local
+data/*
+!data/lista_produtos_RToficial.xlsx
+backups/
+*.db
+*.sqlite
+
+# Uploads / saídas
+uploads/
+exports/qrcodes/
+static/barcodes/
+
+# Certificados locais
+cert.pem
+key.pem
+
+# Logs
+servidor_log.txt
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Excel de origem (exceto lista RT oficial usada no scanner)
+*.xlsx
+!data/lista_produtos_RToficial.xlsx
+
+# Editor / SO
+.vscode/
+.idea/
+Thumbs.db
+
+# Vercel
+.vercel/
+
+logs-audio.txt
+_fix-audio.ps1
+

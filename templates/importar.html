@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Importar - Inventário QR{% endblock %}
+{% block content %}
+<div class="bg-white rounded-xl shadow-md p-6 max-w-2xl mx-auto">
+    <h2 class="text-2xl font-bold mb-4"><i class="fas fa-file-excel text-green-600"></i> Importar Produtos do Excel</h2>
+
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-sm">
+        <p class="font-bold text-blue-700 mb-2">Formato esperado da planilha:</p>
+        <p>Colunas: <strong>EAN</strong>, <strong>Produto</strong> (obrigatórios)</p>
+        <p>Opcionais: Marca, Unidade, Base, Dosagem, <strong>Lote</strong>, <strong>Vencimento</strong>, <strong>Depósito</strong>, Preço (ignorado)</p>
+        <p class="mt-2 text-blue-600">A marca é automaticamente separada do nome do produto quando não informada.</p>
+    </div>
+
+    <form id="form_importar" class="space-y-4">
+        <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-indigo-400 transition">
+            <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3"></i>
+            <p class="text-gray-600">Arraste ou selecione o arquivo Excel</p>
+            <input type="file" name="file" accept=".xlsx,.xls"
+                   class="mt-3 block mx-auto text-sm" onchange="enviarArquivo(this)">
+        </div>
+    </form>
+
+    <div id="resultado_importacao" class="mt-4"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    async function enviarArquivo(input) {
+        if (!input.files.length) return;
+
+        const formData = new FormData();
+        formData.append('file', input.files[0]);
+
+        const div = document.getElementById('resultado_importacao');
+        div.innerHTML = '<p class="text-indigo-600"><i class="fas fa-spinner fa-spin"></i> Importando...</p>';
+
+        const r = await fetch('/api/importar', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await r.json();
+
+        if (data.sucesso) {
+            div.innerHTML = `
+                <div class="bg-green-100 border border-green-300 rounded-lg p-4">
+                    <i class="fas fa-check-circle text-green-600"></i>
+                    <strong>Sucesso!</strong> ${data.msg}
+                </div>`;
+        } else {
+            div.innerHTML = `
+                <div class="bg-red-100 border border-red-300 rounded-lg p-4">
+                    <i class="fas fa-exclamation-triangle text-red-600"></i>
+                    <strong>Erro:</strong> ${data.msg}
+                </div>`;
+        }
+
+        input.value = '';
+    }
+</script>
+{% endblock %}

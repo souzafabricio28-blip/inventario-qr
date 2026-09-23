@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Usuários - Inventário QR{% endblock %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">
+            <i class="fas fa-users mr-2 text-indigo-500"></i>Gerenciar Usuários
+        </h1>
+        <button onclick="abrirModalCriar()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            <i class="fas fa-plus mr-1"></i>Novo Usuário
+        </button>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-100 dark:bg-gray-700">
+                <tr>
+                    <th class="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-300">Usuário</th>
+                    <th class="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-300">Nome</th>
+                    <th class="text-left px-4 py-3 font-semibold text-gray-600 dark:text-gray-300">Criado em</th>
+                    <th class="text-right px-4 py-3 font-semibold text-gray-600 dark:text-gray-300">Ações</th>
+                </tr>
+            </thead>
+            <tbody id="usuarios-lista" class="divide-y divide-gray-200 dark:divide-gray-700">
+                <tr><td colspan="4" class="text-center py-8 text-gray-400">Carregando...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Criar Usuário -->
+<div id="modal-criar" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6">
+        <h2 class="text-lg font-bold text-gray-800 dark:text-white mb-4">
+            <i class="fas fa-user-plus mr-2 text-indigo-500"></i>Novo Usuário
+        </h2>
+        <form onsubmit="criarUsuario(event)" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Usuário</label>
+                <input type="text" id="novo-usuario" required
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nome Completo</label>
+                <input type="text" id="novo-nome"
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Senha</label>
+                <input type="password" id="nova-senha" required
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button type="button" onclick="fecharModal()" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white">Cancelar</button>
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium">Criar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Redefinir Senha -->
+<div id="modal-senha" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6">
+        <h2 class="text-lg font-bold text-gray-800 dark:text-white mb-4">
+            <i class="fas fa-key mr-2 text-indigo-500"></i>Redefinir Senha
+        </h2>
+        <form onsubmit="redefinirSenha(event)" class="space-y-4">
+            <input type="hidden" id="senha-usuario">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Redefinir senha de: <strong id="senha-usuario-nome"></strong></p>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nova Senha</label>
+                <input type="password" id="senha-nova" required
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button type="button" onclick="fecharModalSenha()" class="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white">Cancelar</button>
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium">Redefinir</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const usuarioAtual = '{{ session.get("usuario", "") }}';
+
+    async function carregarUsuarios() {
+        const res = await fetch('/api/usuarios');
+        const data = await res.json();
+        const tbody = document.getElementById('usuarios-lista');
+        if (!data.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-8 text-gray-400">Nenhum usuário cadastrado</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.map(u => `
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                <td class="px-4 py-3 font-medium text-gray-800 dark:text-white">${u.usuario}</td>
+                <td class="px-4 py-3 text-gray-600 dark:text-gray-400">${u.nome || '-'}</td>
+                <td class="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">${u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '-'}</td>
+                <td class="px-4 py-3 text-right space-x-2">
+                    <button onclick="abrirModalSenha('${u.usuario}', '${u.nome || u.usuario}')" class="text-indigo-500 hover:text-indigo-700 text-sm" title="Redefinir senha">
+                        <i class="fas fa-key"></i>
+                    </button>
+                    ${u.usuario !== usuarioAtual ? `<button onclick="excluirUsuario('${u.usuario}')" class="text-red-500 hover:text-red-700 text-sm" title="Excluir"><i class="fas fa-trash"></i></button>` : ''}
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function abrirModalCriar() {
+        document.getElementById('modal-criar').classList.remove('hidden');
+        document.getElementById('novo-usuario').focus();
+    }
+
+    function fecharModal() {
+        document.getElementById('modal-criar').classList.add('hidden');
+        document.getElementById('novo-usuario').value = '';
+        document.getElementById('novo-nome').value = '';
+        document.getElementById('nova-senha').value = '';
+    }
+
+    async function criarUsuario(e) {
+        e.preventDefault();
+        const res = await fetch('/api/usuarios', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                usuario: document.getElementById('novo-usuario').value,
+                nome: document.getElementById('novo-nome').value,
+                senha: document.getElementById('nova-senha').value,
+            })
+        });
+        const data = await res.json();
+        mostrarToast(data.msg, data.sucesso ? 'sucesso' : 'erro');
+        if (data.sucesso) { fecharModal(); carregarUsuarios(); }
+    }
+
+    async function excluirUsuario(usuario) {
+        if (!confirm(`Excluir usuário "${usuario}"?`)) return;
+        const res = await fetch(`/api/usuarios/${usuario}/excluir`, {method: 'POST'});
+        const data = await res.json();
+        mostrarToast(data.msg, data.sucesso ? 'sucesso' : 'erro');
+        if (data.sucesso) carregarUsuarios();
+    }
+
+    function abrirModalSenha(usuario, nome) {
+        document.getElementById('senha-usuario').value = usuario;
+        document.getElementById('senha-usuario-nome').textContent = nome;
+        document.getElementById('senha-nova').value = '';
+        document.getElementById('modal-senha').classList.remove('hidden');
+        document.getElementById('senha-nova').focus();
+    }
+
+    function fecharModalSenha() {
+        document.getElementById('modal-senha').classList.add('hidden');
+    }
+
+    async function redefinirSenha(e) {
+        e.preventDefault();
+        const usuario = document.getElementById('senha-usuario').value;
+        const res = await fetch(`/api/usuarios/${usuario}/redefinir-senha`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({nova_senha: document.getElementById('senha-nova').value})
+        });
+        const data = await res.json();
+        mostrarToast(data.msg, data.sucesso ? 'sucesso' : 'erro');
+        if (data.sucesso) fecharModalSenha();
+    }
+
+    carregarUsuarios();
+</script>
+{% endblock %}

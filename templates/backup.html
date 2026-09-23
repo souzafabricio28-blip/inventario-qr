@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Backup - Inventário QR{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto space-y-6">
+    <div class="bg-white rounded-xl shadow-md p-6">
+        <h2 class="text-2xl font-bold mb-4"><i class="fas fa-download text-blue-600"></i> Download Backup</h2>
+        <p class="text-gray-600 mb-4">Baixe o banco de dados SQLite completo para guardar como cópia de segurança.</p>
+        <a href="/api/backup" class="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-bold">
+            <i class="fas fa-download"></i> Baixar Backup (.db)
+        </a>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md p-6">
+        <h2 class="text-2xl font-bold mb-4"><i class="fas fa-upload text-green-600"></i> Restaurar Backup</h2>
+        <p class="text-gray-600 mb-4">Selecione um arquivo .db para restaurar. O banco atual será substituído.</p>
+        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+            <input type="file" id="file_restore" accept=".db" class="block mx-auto text-sm"
+                   onchange="restaurarBackup(this)">
+            <p class="text-xs text-gray-400 mt-2">Apenas arquivos .db do Inventário QR</p>
+        </div>
+        <div id="resultado_restore" class="mt-4"></div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+    async function restaurarBackup(input) {
+        if (!input.files.length) return;
+        const formData = new FormData();
+        formData.append('file', input.files[0]);
+
+        const div = document.getElementById('resultado_restore');
+        div.innerHTML = '<p class="text-blue-600"><i class="fas fa-spinner fa-spin"></i> Restaurando...</p>';
+
+        const r = await fetch('/api/restore', { method: 'POST', body: formData });
+        const data = await r.json();
+
+        if (data.sucesso) {
+            div.innerHTML = `<div class="bg-green-100 border border-green-300 rounded-lg p-4">${data.msg}</div>`;
+            mostrarToast(data.msg, 'sucesso');
+        } else {
+            div.innerHTML = `<div class="bg-red-100 border border-red-300 rounded-lg p-4">${data.msg}</div>`;
+            mostrarToast(data.msg, 'erro');
+        }
+        input.value = '';
+    }
+</script>
+{% endblock %}

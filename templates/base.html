@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Inv QR">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#4338ca">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
+    <title>{% block title %}Sistema de Inventário{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; transition: background 0.3s, color 0.3s; }
+        body.dark { background: #111827; color: #f3f4f6; }
+        body.dark .bg-white { background: #1f2937; }
+        body.dark .text-gray-600 { color: #9ca3af; }
+        body.dark .text-gray-500 { color: #9ca3af; }
+        body.dark .bg-gray-50 { background: #374151; }
+        body.dark .border { border-color: #4b5563; }
+        body.dark td, body.dark th { color: #e5e7eb; }
+        body.dark input, body.dark select, body.dark textarea { background: #374151; color: #f3f4f6; border-color: #6b7280; }
+        body.dark input::placeholder { color: #9ca3af; }
+
+        .ean-input { font-family: 'Courier New', monospace; font-size: 1.125rem; letter-spacing: 2px; }
+        @media (max-width: 640px) { .ean-input { font-size: 1rem; padding-top: 2px; padding-bottom: 2px; } }
+        .flash { animation: flash-bg 0.3s ease; }
+        @keyframes flash-bg { 0% { background-color: rgb(187 247 208); } 100% { background-color: transparent; } }
+        .flash-error { animation: flash-bg-error 0.3s ease; }
+        @keyframes flash-bg-error { 0% { background-color: rgb(254 202 202); } 100% { background-color: transparent; } }
+        .sortable { cursor: pointer; user-select: none; }
+        .sortable:hover { background-color: rgb(243 244 246); }
+        .sortable::after { content: ' \2195'; opacity: 0.3; }
+        .sortable.asc::after { content: ' \2191'; opacity: 1; }
+        .sortable.desc::after { content: ' \2193'; opacity: 1; }
+        @media print { .no-print { display: none !important; } }
+        .toast { position: fixed; top: 20px; right: 20px; z-index: 9999; transition: all 0.3s; }
+        .kiosk-btn { position: fixed; bottom: 20px; right: 20px; z-index: 999; opacity: 0.5; }
+        .kiosk-btn:hover { opacity: 1; }
+
+        /* Kiosk mode */
+        .kiosk .no-print { display: none !important; }
+        .kiosk main { max-width: 100% !important; padding: 8px !important; }
+        .kiosk .ean-input { font-size: 2rem !important; }
+        .kiosk .kiosk-btn { opacity: 0.2; }
+
+        /* Safe area for iPhone notch */
+        nav { padding-top: env(safe-area-inset-top, 0px); }
+        .camera-scanner-top { top: env(safe-area-inset-top, 0px); }
+        main { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+        /* Camera scanner overlay */
+        #camera-scanner { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 10000; }
+        #camera-scanner video { width: 100%; height: 100%; object-fit: cover; }
+        #camera-scanner .close-cam { position: absolute; top: 20px; right: 20px; background: rgba(255,0,0,0.7); color: #fff; border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 24px; cursor: pointer; z-index: 10001; }
+        #camera-scanner .cam-result { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 12px 24px; border-radius: 12px; font-size: 18px; font-family: monospace; }
+    </style>
+</head>
+<body class="bg-gray-50 {% if tema_config == 'escuro' %}dark{% endif %}">
+    <div id="camera-scanner">
+        <button class="close-cam" onclick="fecharCamera()"><i class="fas fa-times"></i></button>
+        <div id="camera-viewport"></div>
+        <div id="cam-result" class="cam-result hidden"></div>
+    </div>
+
+    <nav class="bg-indigo-700 text-white shadow-xl fixed top-0 left-0 right-0 z-50">
+        <div class="max-w-full mx-auto px-4">
+            <div class="flex items-center justify-between h-14">
+                <a href="/" class="flex items-center space-x-2 flex-shrink-0">
+                    <i class="fas fa-boxes text-xl"></i>
+                    <span class="font-bold text-base hidden sm:inline">Inventário QR</span>
+                </a>
+                <div class="flex items-center space-x-1">
+                    <button onclick="toggleCamera()" class="text-white hover:text-indigo-200 text-sm px-2" title="Escanear com câmera">
+                        <i class="fas fa-camera text-lg"></i>
+                    </button>
+                    <button onclick="toggleFullscreen()" class="text-white hover:text-indigo-200 text-sm px-2 hidden sm:inline" title="Tela cheia">
+                        <i class="fas fa-expand text-lg"></i>
+                    </button>
+                    <button onclick="toggleKiosk()" class="text-white hover:text-indigo-200 text-sm px-2 hidden sm:inline" title="Modo Kiosk">
+                        <i class="fas fa-mobile-alt text-lg"></i>
+                    </button>
+                    <span class="text-indigo-200 text-xs hidden sm:inline ml-2">{{ session.get('nome', session.get('usuario', '')) }}</span>
+                    <a href="/logout" class="text-white hover:text-indigo-200 text-sm px-2" title="Sair">
+                        <i class="fas fa-sign-out-alt text-lg"></i>
+                    </a>
+                    <!-- Hamburger -->
+                    <button onclick="toggleMenu()" class="text-white hover:text-indigo-200 text-sm px-2 sm:hidden" title="Menu">
+                        <i class="fas fa-bars text-lg"></i>
+                    </button>
+                    <div id="nav-links" class="hidden sm:flex items-center text-xs overflow-x-auto ml-2 gap-0.5">
+                        {% for section_name, links in nav_sections %}
+                        {% for href, label, icon in links %}
+                        <a href="{{ href }}" class="text-white hover:text-indigo-100 whitespace-nowrap px-1.5 py-1 rounded hover:bg-indigo-600 font-medium">
+                            <i class="fas {{ icon }}"></i> {{ label }}
+                        </a>
+                        {% endfor %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <!-- Mobile menu -->
+            <div id="mobile-menu" class="hidden sm:hidden pb-3 space-y-1">
+                {% for section_name, links in nav_sections %}
+                <div class="px-3 py-1 text-white opacity-50 text-xs font-bold uppercase tracking-wider">{{ section_name }}</div>
+                {% for href, label, icon in links %}
+                <a href="{{ href }}" class="block px-3 py-2 rounded hover:bg-indigo-600 text-sm font-medium">
+                    <i class="fas {{ icon }}"></i> {{ label }}
+                </a>
+                {% endfor %}
+                {% endfor %}
+            </div>
+        </div>
+    </nav>
+    <main class="max-w-7xl mx-auto px-4 pt-16 pb-6">
+        {% block content %}{% endblock %}
+    </main>
+    <div id="toast-container" class="toast"></div>
+
+    <script>
+        let sessaoAtual = localStorage.getItem('sessao_atual') || '';
+        const hoje = new Date().toISOString().slice(0, 10);
+        let audioCtx = null;
+
+        // Theme
+        const temaServidor = {% if tema_config == 'escuro' %}'escuro'{% else %}''{% endif %};
+        const temaLocal = localStorage.getItem('tema');
+        if (temaLocal === 'escuro' || (!temaLocal && temaServidor === 'escuro')) {
+            document.body.classList.add('dark');
+            localStorage.setItem('tema', 'escuro');
+        }
+
+        // Toast
+        function mostrarToast(msg, tipo='info') {
+            const container = document.getElementById('toast-container');
+            const cores = {info: 'bg-blue-600', sucesso: 'bg-green-600', erro: 'bg-red-600', aviso: 'bg-yellow-600'};
+            const el = document.createElement('div');
+            el.className = `${cores[tipo] || cores.info} text-white px-6 py-3 rounded-lg shadow-lg mb-2 flex items-center space-x-2`;
+            el.innerHTML = `<span>${msg}</span>`;
+            container.appendChild(el);
+            setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 4000);
+        }
+
+        // Sound
+        function beep(tipo='ok') {
+            try {
+                if (localStorage.getItem('som_scan') === '0') return;
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                if (tipo === 'erro') { osc.frequency.value = 200; gain.gain.value = 0.3; osc.start(); setTimeout(() => osc.stop(), 300); }
+                else if (tipo === 'vencido') { osc.frequency.value = 150; gain.gain.value = 0.4; osc.type = 'sawtooth'; osc.start(); setTimeout(() => osc.stop(), 500); }
+                else { osc.frequency.value = 800; gain.gain.value = 0.2; osc.start(); setTimeout(() => osc.stop(), 100); }
+            } catch(e) {}
+        }
+
+        // Format date
+        function formatarData(d) {
+            if (!d) return '-';
+            const p = d.split(' ')[0].split('-');
+            if (p.length !== 3) return d;
+            return `${p[2]}/${p[1]}/${p[0]}`;
+        }
+
+        // Fullscreen
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // Kiosk mode
+        function toggleKiosk() {
+            document.body.classList.toggle('kiosk');
+            mostrarToast(document.body.classList.contains('kiosk') ? 'Modo Kiosk ativado' : 'Modo normal', 'info');
+        }
+
+        // Camera scanner (native capture for iPhone, stream for desktop)
+        let html5qr = null;
+
+        function toggleCamera() {
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            if (isIOS) {
+                // iPhone: use native camera input (works on HTTP)
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.capture = 'environment';
+                input.onchange = function(e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    mostrarToast('Processando imagem...', 'info');
+                    const qr = new Html5Qrcode("dummy");
+                    qr.scanFile(file, true)
+                        .then(result => {
+                            onScanSuccess(result.trim());
+                        })
+                        .catch(() => {
+                            mostrarToast('Não foi possível ler o código', 'erro');
+                        })
+                        .finally(() => { qr.clear(); });
+                    input.value = '';
+                };
+                input.click();
+                return;
+            }
+            // Desktop: use camera stream
+            const div = document.getElementById('camera-scanner');
+            if (div.style.display === 'block') { fecharCamera(); return; }
+            div.style.display = 'block';
+            document.getElementById('cam-result').classList.add('hidden');
+            if (typeof Html5Qrcode !== 'undefined') {
+                html5qr = new Html5Qrcode("camera-viewport");
+                html5qr.start({ facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 250, height: 150 } },
+                    onScanSuccess
+                ).catch(err => {
+                    mostrarToast('Erro ao acessar câmera: '+err, 'erro');
+                    fecharCamera();
+                });
+            } else {
+                mostrarToast('Carregando...', 'info');
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+                script.onload = () => {
+                    html5qr = new Html5Qrcode("camera-viewport");
+                    html5qr.start({ facingMode: "environment" },
+                        { fps: 10, qrbox: { width: 250, height: 150 } },
+                        onScanSuccess
+                    ).catch(err => {
+                        mostrarToast('Erro: '+err, 'erro');
+                        fecharCamera();
+                    });
+                };
+                document.head.appendChild(script);
+            }
+        }
+
+        function onScanSuccess(decodedText) {
+            fecharCamera();
+            const ean = decodedText.trim();
+            document.getElementById('cam-result').textContent = 'EAN: ' + ean;
+            document.getElementById('cam-result').classList.remove('hidden');
+            if (window.location.pathname === '/scanner') {
+                const input = document.getElementById('ean_input');
+                if (input) { input.value = ean; input.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter'})); }
+            } else if (window.location.pathname === '/recebimento') {
+                const input = document.getElementById('ean_scan');
+                if (input) { input.value = ean; input.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter'})); }
+            } else if (window.location.pathname === '/saida') {
+                const input = document.getElementById('ean_input');
+                if (input) { input.value = ean; buscarProduto(); }
+            } else {
+                window.location.href = '/scanner';
+                sessionStorage.setItem('scan_ean', ean);
+            }
+        }
+
+        function fecharCamera() {
+            document.getElementById('camera-scanner').style.display = 'none';
+            if (html5qr) { try { html5qr.stop(); html5qr.clear(); } catch(e) {} html5qr = null; }
+        }
+
+        // Mobile menu
+        function toggleMenu() {
+            const el = document.getElementById('mobile-menu');
+            el.classList.toggle('hidden');
+        }
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById('mobile-menu');
+            if (!menu.classList.contains('hidden') && !e.target.closest('nav')) {
+                menu.classList.add('hidden');
+            }
+        });
+
+        // Service Worker (PWA)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/static/sw.js').then(function(reg) {
+                reg.update();
+            }).catch(function() {});
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            switch(e.key) {
+                case 'F1': e.preventDefault(); window.location.href = '/scanner'; break;
+                case 'F2': e.preventDefault(); window.location.href = '/produtos'; break;
+                case 'F3': e.preventDefault(); window.location.href = '/validacao'; break;
+                case 'F4': e.preventDefault(); window.location.href = '/contagem'; break;
+                case 'F5': e.preventDefault(); window.location.href = '/'; break;
+                case 'F11': e.preventDefault(); toggleFullscreen(); break;
+            }
+            if (e.key === 'k' || e.key === 'K') toggleKiosk();
+            if (e.key === 'c' || e.key === 'C') toggleCamera();
+        });
+
+        // Check for stored scan EAN
+        const scanEan = sessionStorage.getItem('scan_ean');
+        if (scanEan && window.location.pathname === '/scanner') {
+            sessionStorage.removeItem('scan_ean');
+            setTimeout(() => {
+                const input = document.getElementById('ean_input');
+                if (input) { input.value = scanEan; input.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter'})); }
+            }, 500);
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
