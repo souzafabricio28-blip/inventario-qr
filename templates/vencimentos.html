@@ -2,12 +2,12 @@
 {% block title %}Vencimentos - Inventário QR{% endblock %}
 {% block content %}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <div class="bg-white rounded-xl shadow-md p-6">
+    <div id="secao-vencidos" class="bg-white rounded-xl shadow-md p-6 scroll-mt-20">
         <h3 class="font-bold text-lg mb-3 text-red-600"><i class="fas fa-skull-crossbones"></i> Vencidos</h3>
         <p id="count-vencidos" class="text-sm text-gray-500 mb-2"></p>
         <div id="tab-vencidos" class="space-y-2 max-h-80 overflow-y-auto text-sm"></div>
     </div>
-    <div class="bg-white rounded-xl shadow-md p-6">
+    <div id="secao-vencendo30" class="bg-white rounded-xl shadow-md p-6 scroll-mt-20">
         <h3 class="font-bold text-lg mb-3 text-yellow-600"><i class="fas fa-clock"></i> Vencem em 30 Dias</h3>
         <p id="count-vencendo30" class="text-sm text-gray-500 mb-2"></p>
         <div id="tab-vencendo30" class="space-y-2 max-h-80 overflow-y-auto text-sm"></div>
@@ -49,6 +49,11 @@
         document.getElementById('tab-ok').innerHTML = d.ok.length
             ? d.ok.map(p => `<div class="bg-green-50 border border-green-200 rounded p-2 text-xs"><strong>${p.produto}</strong> ${p.lote ? 'Lote: '+p.lote : ''} ${p.data_vencimento ? '- '+formatarData(p.data_vencimento) : ''}</div>`).join('')
             : '<p class="text-gray-400">Nenhum</p>';
+
+        if (location.hash) {
+            const el = document.querySelector(location.hash);
+            if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+        }
     }
     carregar();
 </script>

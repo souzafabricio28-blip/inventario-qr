@@ -2,7 +2,14 @@
 {% block title %}Histórico de Validações - Inventário QR{% endblock %}
 {% block content %}
 <div class="bg-white rounded-xl shadow-md p-6">
-    <h2 class="text-2xl font-bold mb-4"><i class="fas fa-history text-indigo-600"></i> Histórico de Validações de Base</h2>
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <h2 class="text-2xl font-bold"><i class="fas fa-history text-indigo-600"></i> Histórico de Validações de Base</h2>
+        <select id="filtro_status" class="border rounded-lg px-3 py-2 text-sm" onchange="render()">
+            <option value="">Todos</option>
+            <option value="bloqueada">Só bloqueios</option>
+            <option value="aprovada">Só aprovadas</option>
+        </select>
+    </div>
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
             <thead>
@@ -26,6 +33,11 @@
     let validacoes = [];
     let colOrd = 0, ascOrd = false;
 
+    const paramsStatus = new URLSearchParams(location.search).get('status') || '';
+    if (paramsStatus) {
+        document.getElementById('filtro_status').value = paramsStatus;
+    }
+
     async function carregar() {
         const r = await fetch('/api/validacoes');
         validacoes = await r.json();
@@ -33,13 +45,16 @@
     }
 
     function render() {
+        const st = document.getElementById('filtro_status').value;
+        const lista = st ? validacoes.filter(v => v.status === st) : validacoes;
         const keys = ['data_hora','ean','produto','base_oficial','base_informada','status'];
-        const sorted = [...validacoes].sort((a,b) => {
+        const sorted = [...lista].sort((a,b) => {
             const va = (a[keys[colOrd]]||'').toString().toUpperCase();
             const vb = (b[keys[colOrd]]||'').toString().toUpperCase();
             return ascOrd ? va.localeCompare(vb) : vb.localeCompare(va);
         });
-        document.getElementById('tab-validacoes').innerHTML = sorted.map(v => `
+        document.getElementById('tab-validacoes').innerHTML = sorted.length
+            ? sorted.map(v => `
             <tr class="hover:bg-gray-50">
                 <td class="px-3 py-2 text-xs">${v.data_hora}</td>
                 <td class="px-3 py-2 font-mono text-xs">${v.ean}</td>
@@ -48,7 +63,8 @@
                 <td class="px-3 py-2">${v.base_informada}</td>
                 <td class="px-3 py-2"><span class="px-2 py-1 rounded-full text-xs font-bold ${v.status==='aprovada'?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}">${v.status.toUpperCase()}</span></td>
             </tr>
-        `).join('');
+        `).join('')
+            : '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Nenhum registro</td></tr>';
         document.getElementById('total-validacoes').textContent = `${sorted.length} registro(s)`;
         document.querySelectorAll('.sortable').forEach((th,i) => {
             th.classList.toggle('asc', i===colOrd && ascOrd);

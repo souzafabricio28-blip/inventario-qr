@@ -59,32 +59,32 @@ fetch('/api/qr-conexao')
     </a>
 </div>
 
-<!-- Status Cards -->
+<!-- Status Cards (clicáveis) -->
 <div class="grid grid-cols-3 md:grid-cols-6 gap-3 mb-6" id="cards">
-    <div class="bg-white rounded-xl shadow p-3 border-l-4 border-blue-500">
+    <a href="/produtos" class="bg-white rounded-xl shadow p-3 border-l-4 border-blue-500 hover:shadow-lg hover:bg-blue-50/40 transition cursor-pointer block no-underline">
         <p class="text-2xs text-gray-500 uppercase">Produtos</p>
         <p id="card-produtos" class="text-2xl font-bold text-blue-700">-</p>
-    </div>
-    <div class="bg-white rounded-xl shadow p-3 border-l-4 border-green-500">
+    </a>
+    <a href="/contagem" class="bg-white rounded-xl shadow p-3 border-l-4 border-green-500 hover:shadow-lg hover:bg-green-50/40 transition cursor-pointer block no-underline" title="Sessões de inventário">
         <p class="text-2xs text-gray-500 uppercase">Sessões</p>
         <p id="card-sessoes" class="text-2xl font-bold text-green-700">-</p>
-    </div>
-    <div class="bg-white rounded-xl shadow p-3 border-l-4 border-purple-500">
+    </a>
+    <a href="/contagem?filtro=contado" class="bg-white rounded-xl shadow p-3 border-l-4 border-purple-500 hover:shadow-lg hover:bg-purple-50/40 transition cursor-pointer block no-underline">
         <p class="text-2xs text-gray-500 uppercase">Contagens</p>
         <p id="card-contagens" class="text-2xl font-bold text-purple-700">-</p>
-    </div>
-    <div class="bg-white rounded-xl shadow p-3 border-l-4 border-red-500">
+    </a>
+    <a href="/vencimentos#secao-vencidos" class="bg-white rounded-xl shadow p-3 border-l-4 border-red-500 hover:shadow-lg hover:bg-red-50/40 transition cursor-pointer block no-underline">
         <p class="text-2xs text-gray-500 uppercase">Vencidos</p>
         <p id="card-vencidos" class="text-2xl font-bold text-red-700">-</p>
-    </div>
-    <div class="bg-white rounded-xl shadow p-3 border-l-4 border-yellow-500">
+    </a>
+    <a href="/vencimentos#secao-vencendo30" class="bg-white rounded-xl shadow p-3 border-l-4 border-yellow-500 hover:shadow-lg hover:bg-yellow-50/40 transition cursor-pointer block no-underline">
         <p class="text-2xs text-gray-500 uppercase">30 dias</p>
         <p id="card-vencendo30" class="text-2xl font-bold text-yellow-700">-</p>
-    </div>
-    <div class="bg-white rounded-xl shadow p-3 border-l-4 border-orange-500">
+    </a>
+    <a href="/validacoes?status=bloqueada" class="bg-white rounded-xl shadow p-3 border-l-4 border-orange-500 hover:shadow-lg hover:bg-orange-50/40 transition cursor-pointer block no-underline">
         <p class="text-2xs text-gray-500 uppercase">Bloqueios</p>
         <p id="card-bloqueios" class="text-2xl font-bold text-orange-700">-</p>
-    </div>
+    </a>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">

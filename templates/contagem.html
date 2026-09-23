@@ -283,6 +283,10 @@
     }
 
     carregarSessoes();
+    const filtroUrl = new URLSearchParams(location.search).get('filtro');
+    if (filtroUrl === 'contado' || filtroUrl === 'pendente') {
+        document.getElementById('filtro_status').value = filtroUrl;
+    }
     carregarContagem();
 </script>
 {% endblock %}
