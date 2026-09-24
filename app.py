@@ -22,7 +22,7 @@ from database.backend import (
     listar_recebimentos, get_recebimento, criar_recebimento_nf,
     verificar_chave_nfe, get_item_recebimento, conferir_item_recebimento,
     finalizar_recebimento, excluir_recebimento, get_etiquetas_nfe,
-    listar_estoque, listar_estoque_zerados, listar_saidas, registrar_saida,
+    listar_estoque, listar_estoque_zerados, mover_estoque, listar_saidas, registrar_saida,
     zerar_estoque_geral,
     qtd_contagem_sessao, vincular_codigo,
     definir_contagem_sessao, excluir_contagem_sessao,
@@ -526,7 +526,7 @@ def api_contagem():
                 loja_row = row.get("loja") or loja
                 ep = get_estoque(row["ean"], loja_row)
                 if ep:
-                    row["quantidade_estoque"] = float(ep.get("quantidade_estoque") or 0)
+                    row["quantidade_estoque"] = float(ep.get("total") or ep.get("quantidade_estoque") or 0)
         except Exception:
             pass
         return jsonify(resultado)
@@ -1220,6 +1220,22 @@ def api_zerar_estoque():
         "loja": loja,
         "msg": f"Estoque da loja {loja} zerado: {afetados} produto(s) atualizado(s){extra}.",
     })
+
+
+@app.route("/api/estoque/mover", methods=["POST"])
+@login_required
+@api_handler
+def api_mover_estoque():
+    """Move unidades entre depósito e loja física de um produto da loja."""
+    data = request.json or {}
+    ean = (data.get("ean") or "").strip()
+    loja = (data.get("loja") or "").strip() or "RTJ"
+    try:
+        quantidade = float(data.get("quantidade") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"sucesso": False, "msg": "Quantidade inválida"})
+    ok, msg = mover_estoque(ean, loja=loja, quantidade=quantidade)
+    return jsonify({"sucesso": ok, "msg": msg, "loja": loja, "ean": ean})
 
 # ── Saída de Estoque ─────────────────────────────────────
 

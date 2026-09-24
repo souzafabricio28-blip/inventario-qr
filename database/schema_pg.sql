@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS saidas_estoque (
 CREATE TABLE IF NOT EXISTS estoque_produto (
     ean TEXT NOT NULL,
     loja TEXT NOT NULL DEFAULT 'RTJ',
+    quantidade_loja DOUBLE PRECISION NOT NULL DEFAULT 0,
     quantidade_estoque DOUBLE PRECISION NOT NULL DEFAULT 0,
     lote TEXT DEFAULT '',
     data_vencimento TEXT DEFAULT '',
@@ -137,6 +138,7 @@ ALTER TABLE inventario_contagem ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT 'RTJ'
 ALTER TABLE sessoes_inventario ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT 'RTJ';
 ALTER TABLE saidas_estoque ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT '';
 ALTER TABLE recebimentos_nf ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT 'RTJ';
+ALTER TABLE estoque_produto ADD COLUMN IF NOT EXISTS quantidade_loja DOUBLE PRECISION NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_inventario_loja ON inventario_contagem(loja);
 CREATE INDEX IF NOT EXISTS idx_sessoes_loja ON sessoes_inventario(loja);
 CREATE INDEX IF NOT EXISTS idx_estoque_produto_loja ON estoque_produto(loja);

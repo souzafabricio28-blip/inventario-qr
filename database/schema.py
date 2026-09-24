@@ -194,13 +194,17 @@ def migrar_banco(conn):
 
     cursor.execute("CREATE TABLE IF NOT EXISTS estoque_produto ("
                    "ean TEXT NOT NULL, loja TEXT NOT NULL DEFAULT 'RTJ',"
+                   "quantidade_loja REAL NOT NULL DEFAULT 0,"
                    "quantidade_estoque REAL NOT NULL DEFAULT 0, lote TEXT DEFAULT '',"
                    "data_vencimento TEXT DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
                    "PRIMARY KEY (ean, loja))")
+    existing_ep = [row[1] for row in cursor.execute("PRAGMA table_info(estoque_produto)").fetchall()]
+    if existing_ep and "quantidade_loja" not in existing_ep:
+        cursor.execute("ALTER TABLE estoque_produto ADD COLUMN quantidade_loja REAL NOT NULL DEFAULT 0")
     qtd = cursor.execute("SELECT COUNT(*) FROM estoque_produto").fetchone()[0]
     if qtd == 0:
-        cursor.execute("""INSERT OR IGNORE INTO estoque_produto (ean, loja, quantidade_estoque, lote, data_vencimento)
-                          SELECT ean, 'RTJ', quantidade_estoque, lote, data_vencimento FROM produtos
+        cursor.execute("""INSERT OR IGNORE INTO estoque_produto (ean, loja, quantidade_loja, quantidade_estoque, lote, data_vencimento)
+                          SELECT ean, 'RTJ', 0, quantidade_estoque, lote, data_vencimento FROM produtos
                           WHERE COALESCE(quantidade_estoque, 0) > 0""")
 
 

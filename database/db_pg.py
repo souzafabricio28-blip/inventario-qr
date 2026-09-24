@@ -311,8 +311,8 @@ def zerar_contagens(sessao="", apagar_sessao=False):
 
 def aplicar_contagem_como_estoque(sessao, zerar_nao_contados=False, loja=""):
     """
-    Grava a contagem da sessão como estoque da loja (substitui o saldo daquela loja
-    em estoque_produto). Entradas futuras (NF-e) continuam somando em cima desse saldo.
+    Grava a contagem da sessão como LOJA FÍSICA da loja (quantidade_loja) em
+    estoque_produto. Entradas futuras (NF-e) somam no depósito (quantidade_estoque).
     """
     sessao = (sessao or "").strip()
     if not sessao:
@@ -336,10 +336,10 @@ def aplicar_contagem_como_estoque(sessao, zerar_nao_contados=False, loja=""):
             lote = c.get("lote") or ""
             venc = c.get("data_vencimento") or ""
             _exec(conn,
-                """INSERT INTO estoque_produto (ean, loja, quantidade_estoque, lote, data_vencimento, updated_at)
+                """INSERT INTO estoque_produto (ean, loja, quantidade_loja, lote, data_vencimento, updated_at)
                    VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
                    ON CONFLICT (ean, loja) DO UPDATE SET
-                     quantidade_estoque = EXCLUDED.quantidade_estoque,
+                     quantidade_loja = EXCLUDED.quantidade_loja,
                      lote = CASE WHEN EXCLUDED.lote != '' THEN EXCLUDED.lote ELSE estoque_produto.lote END,
                      data_vencimento = CASE WHEN EXCLUDED.data_vencimento != '' THEN EXCLUDED.data_vencimento ELSE estoque_produto.data_vencimento END,
                      updated_at = CURRENT_TIMESTAMP""",
@@ -350,8 +350,9 @@ def aplicar_contagem_como_estoque(sessao, zerar_nao_contados=False, loja=""):
         zerados = 0
         if zerar_nao_contados and eans_ok:
             cur = _exec(conn,
-                """UPDATE estoque_produto SET quantidade_estoque = 0, updated_at = CURRENT_TIMESTAMP
-                   WHERE loja = %s AND ean <> ALL(%s) AND COALESCE(quantidade_estoque, 0) > 0""",
+                """UPDATE estoque_produto SET quantidade_loja = 0, quantidade_estoque = 0, updated_at = CURRENT_TIMESTAMP
+                   WHERE loja = %s AND ean <> ALL(%s)
+                     AND (COALESCE(quantidade_loja, 0) > 0 OR COALESCE(quantidade_estoque, 0) > 0)""",
                 (loja, list(eans_ok)))
             zerados = cur.rowcount
 
@@ -439,10 +440,10 @@ def get_contagens(sessao="", cruzar=False, loja=""):
             where = " OR ".join("(ean = %s AND loja = %s)" for _ in pares)
             params = [x for p in pares for x in p]
             rows_ep = _exec(conn,
-                f"SELECT ean, loja, quantidade_estoque FROM estoque_produto WHERE {where}",
+                f"SELECT ean, loja, quantidade_loja, quantidade_estoque FROM estoque_produto WHERE {where}",
                 params).fetchall()
             for r in rows_ep:
-                estoques[(r["ean"], r["loja"])] = r["quantidade_estoque"]
+                estoques[(r["ean"], r["loja"])] = (r["quantidade_loja"] or 0) + (r["quantidade_estoque"] or 0)
     for r in result:
         r["quantidade_estoque"] = int(float(estoques.get((r["ean"], r["loja"] or "RTJ"), 0) or 0))
     return result
@@ -843,17 +844,21 @@ def _normalizar_loja(loja=""):
 
 
 def get_estoque(ean, loja=""):
-    """Retorna o saldo/lote/validade do produto na loja (ou None)."""
+    """Retorna o saldo/lote/validade do produto na loja (ou None). Inclui 'total'."""
     loja = _normalizar_loja(loja)
     with get_db() as conn:
         row = _exec(conn,
             "SELECT * FROM estoque_produto WHERE ean=%s AND loja=%s LIMIT 1",
             (ean, loja)).fetchone()
-        return dict(row) if row else None
+        if row is None:
+            return None
+        res = dict(row)
+        res["total"] = float(res.get("quantidade_loja") or 0) + float(res.get("quantidade_estoque") or 0)
+        return res
 
 
 def set_estoque(ean, quantidade, loja="", lote="", data_vencimento=""):
-    """Define (substitui) o saldo do produto na loja. Upsert em estoque_produto."""
+    """Define (substitui) o saldo do DEPÓSITO do produto na loja. Upsert em estoque_produto."""
     loja = _normalizar_loja(loja)
     with get_db() as conn:
         _exec(conn,
@@ -868,25 +873,69 @@ def set_estoque(ean, quantidade, loja="", lote="", data_vencimento=""):
         conn.commit()
 
 
+def mover_estoque(ean, loja="", quantidade=0):
+    """Move unidades entre depósito e loja física.
+    quantidade > 0: depósito -> loja física; quantidade < 0: loja física -> depósito.
+    Retorna (ok, mensagem)."""
+    loja = _normalizar_loja(loja)
+    try:
+        quantidade = float(quantidade or 0)
+    except (TypeError, ValueError):
+        return False, "Quantidade inválida"
+    if quantidade == 0:
+        return False, "Informe uma quantidade para mover"
+    with get_db() as conn:
+        row = _exec(conn,
+            "SELECT quantidade_loja, quantidade_estoque FROM estoque_produto WHERE ean=%s AND loja=%s",
+            (ean, loja)).fetchone()
+        if row is None:
+            return False, "Produto sem registro de estoque nesta loja"
+        ql = float(row["quantidade_loja"] or 0)
+        qe = float(row["quantidade_estoque"] or 0)
+        if quantidade > 0:
+            if qe < quantidade:
+                return False, f"Depósito insuficiente (tem {qe:.0f} un.)"
+            ql += quantidade
+            qe -= quantidade
+            msg = f"Movido {quantidade:.0f} un. do depósito para a loja física"
+        else:
+            q = -quantidade
+            if ql < q:
+                return False, f"Loja física insuficiente (tem {ql:.0f} un.)"
+            ql -= q
+            qe += q
+            msg = f"Movido {q:.0f} un. da loja física para o depósito"
+        _exec(conn,
+            "UPDATE estoque_produto SET quantidade_loja=%s, quantidade_estoque=%s, updated_at=CURRENT_TIMESTAMP WHERE ean=%s AND loja=%s",
+            (ql, qe, ean, loja))
+        conn.commit()
+    return True, msg
+
+
 def listar_estoque(search="", loja=""):
     loja = _normalizar_loja(loja)
     with get_db() as conn:
+        cols = "p.ean, COALESCE(p.produto, ep.ean) as produto, p.marca," \
+               " COALESCE(ep.quantidade_loja, 0) as quantidade_loja," \
+               " ep.quantidade_estoque," \
+               " (COALESCE(ep.quantidade_loja, 0) + COALESCE(ep.quantidade_estoque, 0)) as total," \
+               " ep.lote, ep.data_vencimento, p.base_especifica"
         if search:
-            rows = _exec(conn, """
-                SELECT p.ean, COALESCE(p.produto, ep.ean) as produto, p.marca,
-                       ep.quantidade_estoque, ep.lote, ep.data_vencimento, p.base_especifica
+            rows = _exec(conn, f"""
+                SELECT {cols}
                 FROM estoque_produto ep LEFT JOIN produtos p ON p.ean = ep.ean
-                WHERE ep.loja = %s AND ep.quantidade_estoque > 0
+                WHERE ep.loja = %s
+                  AND (COALESCE(ep.quantidade_loja, 0) + COALESCE(ep.quantidade_estoque, 0)) > 0
                   AND (ep.ean ILIKE %s OR COALESCE(p.produto, '') ILIKE %s)
-                ORDER BY ep.quantidade_estoque DESC LIMIT 200
+                ORDER BY total DESC LIMIT 200
             """, (loja, f"%{search}%", f"%{search}%")).fetchall()
         else:
-            rows = _exec(conn, """
-                SELECT p.ean, COALESCE(p.produto, ep.ean) as produto, p.marca,
-                       ep.quantidade_estoque, ep.lote, ep.data_vencimento, p.base_especifica
+            rows = _exec(conn, f"""
+                SELECT {cols}
                 FROM estoque_produto ep LEFT JOIN produtos p ON p.ean = ep.ean
-                WHERE ep.loja = %s AND ep.quantidade_estoque > 0
-                ORDER BY ep.quantidade_estoque DESC LIMIT 200
+                WHERE ep.loja = %s
+                  AND (COALESCE(ep.quantidade_loja, 0) + COALESCE(ep.quantidade_estoque, 0)) > 0
+                ORDER BY total DESC LIMIT 200
             """, (loja,)).fetchall()
         return [dict(r) for r in rows]
 
@@ -894,21 +943,23 @@ def listar_estoque(search="", loja=""):
 def listar_estoque_zerados(search="", loja=""):
     loja = _normalizar_loja(loja)
     with get_db() as conn:
+        cols = "p.ean, COALESCE(p.produto, p.ean) as produto," \
+               " COALESCE(ep.quantidade_loja, 0) as quantidade_loja," \
+               " COALESCE(ep.quantidade_estoque, 0) as quantidade_estoque," \
+               " (COALESCE(ep.quantidade_loja, 0) + COALESCE(ep.quantidade_estoque, 0)) as total"
         if search:
-            rows = _exec(conn, """
-                SELECT p.ean, COALESCE(p.produto, p.ean) as produto,
-                       COALESCE(ep.quantidade_estoque, 0) as quantidade_estoque
+            rows = _exec(conn, f"""
+                SELECT {cols}
                 FROM produtos p LEFT JOIN estoque_produto ep ON ep.ean = p.ean AND ep.loja = %s
-                WHERE COALESCE(ep.quantidade_estoque, 0) <= 0
+                WHERE (COALESCE(ep.quantidade_loja, 0) + COALESCE(ep.quantidade_estoque, 0)) <= 0
                   AND (p.ean ILIKE %s OR p.produto ILIKE %s)
                 ORDER BY produto LIMIT 200
             """, (loja, f"%{search}%", f"%{search}%")).fetchall()
         else:
-            rows = _exec(conn, """
-                SELECT p.ean, COALESCE(p.produto, p.ean) as produto,
-                       COALESCE(ep.quantidade_estoque, 0) as quantidade_estoque
+            rows = _exec(conn, f"""
+                SELECT {cols}
                 FROM produtos p LEFT JOIN estoque_produto ep ON ep.ean = p.ean AND ep.loja = %s
-                WHERE COALESCE(ep.quantidade_estoque, 0) <= 0
+                WHERE (COALESCE(ep.quantidade_loja, 0) + COALESCE(ep.quantidade_estoque, 0)) <= 0
                 ORDER BY produto LIMIT 200
             """, (loja,)).fetchall()
         return [dict(r) for r in rows]
@@ -921,19 +972,22 @@ def zerar_estoque_geral(limpar_lote=False, loja=""):
         if limpar_lote:
             cur = _exec(conn, """
                 UPDATE estoque_produto SET
+                   quantidade_loja = 0,
                    quantidade_estoque = 0,
                    lote = '',
                    data_vencimento = '',
                    updated_at = CURRENT_TIMESTAMP
                 WHERE loja = %s
-                   AND (COALESCE(quantidade_estoque, 0) <> 0
+                   AND (COALESCE(quantidade_loja, 0) <> 0
+                        OR COALESCE(quantidade_estoque, 0) <> 0
                         OR COALESCE(lote, '') <> ''
                         OR COALESCE(data_vencimento, '') <> '')""",
                 (loja,))
         else:
             cur = _exec(conn, """
-                UPDATE estoque_produto SET quantidade_estoque = 0, updated_at = CURRENT_TIMESTAMP
-                WHERE loja = %s AND COALESCE(quantidade_estoque, 0) <> 0""",
+                UPDATE estoque_produto SET quantidade_loja = 0, quantidade_estoque = 0, updated_at = CURRENT_TIMESTAMP
+                WHERE loja = %s
+                   AND (COALESCE(quantidade_loja, 0) <> 0 OR COALESCE(quantidade_estoque, 0) <> 0)""",
                 (loja,))
         afetados = cur.rowcount or 0
         conn.commit()
@@ -954,13 +1008,28 @@ def registrar_saida(ean, produto, quantidade, lote, data_vencimento, motivo, obs
         _exec(conn, """INSERT INTO saidas_estoque (ean, produto, quantidade, lote, data_vencimento, motivo, observacao, loja)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
             (ean, produto, quantidade, lote, data_vencimento, motivo, observacao, loja))
-        cur = _exec(conn, """UPDATE estoque_produto SET
-            quantidade_estoque = GREATEST(0, COALESCE(quantidade_estoque, 0) - %s),
-            updated_at = CURRENT_TIMESTAMP
-            WHERE ean=%s AND loja=%s""", (quantidade, ean, loja))
-        if cur.rowcount == 0:
-            _exec(conn, """INSERT INTO estoque_produto (ean, loja, quantidade_estoque)
-                VALUES (%s, %s, 0) ON CONFLICT (ean, loja) DO NOTHING""", (ean, loja))
+        row = _exec(conn,
+            "SELECT quantidade_loja, quantidade_estoque FROM estoque_produto WHERE ean=%s AND loja=%s",
+            (ean, loja)).fetchone()
+        if row is not None:
+            ql = float(row["quantidade_loja"] or 0)
+            qe = float(row["quantidade_estoque"] or 0)
+            ded = float(quantidade or 0)
+            if ql >= ded:
+                _exec(conn,
+                    "UPDATE estoque_produto SET quantidade_loja = quantidade_loja - %s, updated_at = CURRENT_TIMESTAMP WHERE ean=%s AND loja=%s",
+                    (ded, ean, loja))
+            else:
+                _exec(conn,
+                    "UPDATE estoque_produto SET quantidade_loja = 0, updated_at = CURRENT_TIMESTAMP WHERE ean=%s AND loja=%s",
+                    (ean, loja))
+                restante = ded - ql
+                _exec(conn,
+                    "UPDATE estoque_produto SET quantidade_estoque = GREATEST(0, quantidade_estoque - %s), updated_at = CURRENT_TIMESTAMP WHERE ean=%s AND loja=%s",
+                    (restante, ean, loja))
+        else:
+            _exec(conn, """INSERT INTO estoque_produto (ean, loja, quantidade_loja, quantidade_estoque)
+                VALUES (%s, %s, 0, 0) ON CONFLICT (ean, loja) DO NOTHING""", (ean, loja))
         conn.commit()
 
 

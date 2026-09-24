@@ -28,9 +28,12 @@
                     <tr class="bg-gray-50 text-gray-500 uppercase text-xs">
                         <th class="text-left p-2">EAN</th>
                         <th class="text-left p-2">Produto</th>
-                        <th class="text-center p-2">Qtd</th>
+                        <th class="text-center p-2">Loja Física</th>
+                        <th class="text-center p-2">Depósito</th>
+                        <th class="text-center p-2">Total</th>
                         <th class="text-center p-2">Lote</th>
                         <th class="text-center p-2">Validade</th>
+                        <th class="text-center p-2">Mover</th>
                     </tr>
                 </thead>
                 <tbody id="estoque-body"></tbody>
@@ -83,7 +86,7 @@
 
     function atualizarFraseLoja() {
         document.getElementById('loja-frase').textContent =
-            'Estoque exibido da loja: ' + lojaEstoque + ' (RTJ = Rio Tinto, RTB = Rio do Bastos)';
+            'Loja ' + lojaEstoque + ' (RTJ = Rio Tinto, RTB = Rio do Bastos) — Loja Física é o que está no balcão/prateleira; Depósito é o estoque recebido (NF-e). Total = física + depósito.';
     }
 
     async function buscarEstoque() {
@@ -107,22 +110,30 @@
                 <tr class="border-b hover:bg-gray-50">
                     <td class="p-2 font-mono text-xs">${p.ean}</td>
                     <td class="p-2 font-medium">${p.produto || ''}</td>
-                    <td class="p-2 text-center font-bold ${p.quantidade_estoque > 0 ? 'text-indigo-600' : 'text-red-500'}">${p.quantidade_estoque || 0}</td>
+                    <td class="p-2 text-center font-bold ${p.quantidade_loja > 0 ? 'text-emerald-600' : 'text-gray-300'}">${p.quantidade_loja || 0}</td>
+                    <td class="p-2 text-center font-bold ${p.quantidade_estoque > 0 ? 'text-sky-600' : 'text-gray-300'}">${p.quantidade_estoque || 0}</td>
+                    <td class="p-2 text-center font-bold ${p.total > 0 ? 'text-indigo-600' : 'text-red-500'}">${p.total || 0}</td>
                     <td class="p-2 text-center text-xs ${p.lote ? 'text-gray-600' : 'text-gray-300'}">${p.lote || '-'}</td>
                     <td class="p-2 text-center text-xs ${p.data_vencimento ? 'text-gray-600' : 'text-gray-300'}">${formatarData(p.data_vencimento) || '-'}</td>
+                    <td class="p-2 text-center">
+                        <button onclick="moverEstoque('${p.ean}')" title="Mover entre depósito e loja física"
+                                class="text-indigo-500 hover:text-indigo-700 text-sm">
+                            <i class="fas fa-right-left"></i>
+                        </button>
+                    </td>
                 </tr>
             `).join('');
         }
 
-        const total = lista.reduce((s, p) => s + Number(p.quantidade_estoque || 0), 0);
-        const comEstoque = lista.filter(p => Number(p.quantidade_estoque || 0) > 0).length;
+        const total = lista.reduce((s, p) => s + Number(p.total || 0), 0);
+        const comEstoque = lista.filter(p => Number(p.total || 0) > 0).length;
         document.getElementById('resumo-estoque').innerHTML = `
             <div class="bg-indigo-50 rounded-lg p-3">
                 <p class="text-2xl font-bold text-indigo-600">${total}</p>
                 <p class="text-xs text-gray-500">Total unidades (${lojaEstoque})</p>
             </div>
-            <div class="bg-green-50 rounded-lg p-3">
-                <p class="text-2xl font-bold text-green-600">${comEstoque}</p>
+            <div class="bg-emerald-50 rounded-lg p-3">
+                <p class="text-2xl font-bold text-emerald-600">${comEstoque}</p>
                 <p class="text-xs text-gray-500">Produtos em estoque</p>
             </div>
             <div class="bg-yellow-50 rounded-lg p-3">
@@ -130,6 +141,33 @@
                 <p class="text-xs text-gray-500">Média por item</p>
             </div>
         `;
+    }
+
+    async function moverEstoque(ean) {
+        const entrada = prompt(
+            'EAN ' + ean + ' — mover entre depósito e loja física (' + lojaEstoque + '):\n\n' +
+            'Digite um número POSITIVO para mover do DEPÓSITO para a LOJA FÍSICA.\n' +
+            'Digite um número NEGATIVO para mover da LOJA FÍSICA para o DEPÓSITO.\n\n' +
+            'Ex.: 5  (depósito -> loja física)\nEx.: -3 (loja física -> depósito)'
+        );
+        if (entrada === null) return;
+        const quantidade = Number(String(entrada).trim());
+        if (!entrada.trim() || isNaN(quantidade) || quantidade === 0) {
+            alert('Informe uma quantidade válida (ex.: 5 ou -3).');
+            return;
+        }
+        try {
+            const r = await fetch('/api/estoque/mover', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ ean: ean, loja: lojaEstoque, quantidade: quantidade }),
+            });
+            const data = await r.json();
+            alert(data.msg || (data.sucesso ? 'OK' : 'Erro'));
+            if (data.sucesso) await buscarEstoque();
+        } catch (e) {
+            alert('Falha ao mover estoque: ' + e);
+        }
     }
 
     async function mostrarZerados() {
@@ -147,7 +185,7 @@
                 <div class="flex justify-between items-center p-1 border-b text-xs">
                     <span class="font-mono">${p.ean}</span>
                     <span class="flex-1 ml-2">${p.produto || ''}</span>
-                    <span class="text-red-500 font-bold">${p.quantidade_estoque || 0}</span>
+                    <span class="text-red-500 font-bold">${p.total || 0}</span>
                 </div>
             `).join('');
     }
