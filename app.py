@@ -1027,6 +1027,7 @@ def api_nfe_upload():
         nfe.get("chave_acesso", ""), nfe["numero"], nfe.get("serie", ""),
         nfe.get("fornecedor", ""), nfe.get("cnpj_fornecedor", ""),
         nfe.get("data_emissao", ""), nfe.get("itens", []),
+        loja=request.form.get("loja") or "",
     )
     return jsonify({"sucesso": True, "recebimento_id": rec_id, "nfe": nfe})
 

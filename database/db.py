@@ -783,14 +783,15 @@ def get_recebimento(rec_id):
 
 
 def criar_recebimento_nf(chave_acesso, numero, serie, fornecedor, cnpj_fornecedor,
-                          data_emissao, itens):
+                          data_emissao, itens, loja="RTJ"):
+    loja = _normalizar_loja(loja)
     with get_db() as conn:
         conn.execute(
             """INSERT INTO recebimentos_nf (chave_acesso, numero, serie, fornecedor,
-               cnpj_fornecedor, data_emissao, total_itens)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               cnpj_fornecedor, data_emissao, total_itens, loja)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (chave_acesso, numero, serie, fornecedor, cnpj_fornecedor,
-             data_emissao, len(itens)),
+             data_emissao, len(itens), loja),
         )
         rec_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
@@ -873,9 +874,10 @@ def conferir_item_recebimento(rec_id, ean, quantidade, lote, data_venc):
         }
 
 
-def finalizar_recebimento(rec_id, loja="RTJ"):
-    loja = _normalizar_loja(loja)
+def finalizar_recebimento(rec_id, loja=None):
     with get_db() as conn:
+        row = conn.execute("SELECT loja FROM recebimentos_nf WHERE id=?", (rec_id,)).fetchone()
+        loja = _normalizar_loja(loja or (row["loja"] if row else "") or "RTJ")
         itens = [dict(r) for r in conn.execute(
             "SELECT * FROM itens_recebimento WHERE recebimento_id=?", (rec_id,)).fetchall()]
 

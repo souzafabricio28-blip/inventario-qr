@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS recebimentos_nf (
     total_itens INTEGER DEFAULT 0,
     itens_recebidos INTEGER DEFAULT 0,
     finalizado_em TIMESTAMP,
-    excluido INTEGER DEFAULT 0
+    excluido INTEGER DEFAULT 0,
+    loja TEXT DEFAULT 'RTJ'
 );
 
 CREATE TABLE IF NOT EXISTS itens_recebimento (
@@ -135,6 +136,7 @@ CREATE INDEX IF NOT EXISTS idx_usuarios_usuario ON usuarios(usuario);
 ALTER TABLE inventario_contagem ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT 'RTJ';
 ALTER TABLE sessoes_inventario ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT 'RTJ';
 ALTER TABLE saidas_estoque ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT '';
+ALTER TABLE recebimentos_nf ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT 'RTJ';
 CREATE INDEX IF NOT EXISTS idx_inventario_loja ON inventario_contagem(loja);
 CREATE INDEX IF NOT EXISTS idx_sessoes_loja ON sessoes_inventario(loja);
 CREATE INDEX IF NOT EXISTS idx_estoque_produto_loja ON estoque_produto(loja);

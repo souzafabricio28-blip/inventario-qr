@@ -44,7 +44,8 @@ def criar_tabelas():
             status TEXT DEFAULT 'aberto',
             total_itens INTEGER DEFAULT 0,
             itens_recebidos INTEGER DEFAULT 0,
-            finalizado_em TIMESTAMP
+            finalizado_em TIMESTAMP,
+            loja TEXT DEFAULT 'RTJ'
         );
 
         CREATE TABLE IF NOT EXISTS itens_recebimento (
@@ -167,6 +168,8 @@ def migrar_banco(conn):
     existing_rec = [row[1] for row in cursor.execute("PRAGMA table_info(recebimentos_nf)").fetchall()]
     if "excluido" not in existing_rec:
         cursor.execute("ALTER TABLE recebimentos_nf ADD COLUMN excluido INTEGER DEFAULT 0")
+    if "loja" not in existing_rec:
+        cursor.execute("ALTER TABLE recebimentos_nf ADD COLUMN loja TEXT DEFAULT 'RTJ'")
 
     if "quantidade_estoque" not in existing:
         cursor.execute("ALTER TABLE produtos ADD COLUMN quantidade_estoque REAL DEFAULT 0")
