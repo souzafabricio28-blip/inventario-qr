@@ -209,6 +209,11 @@ def criar_produto(ean, produto, marca="", unidade_medida="UN",
                  1 if editado_manual else 0),
             )
             conn.commit()
+            if editado_manual:
+                try:
+                    vincular_codigo(ean, ean, origem="bip")
+                except Exception:
+                    pass
             return True, "Produto cadastrado com sucesso"
         except psycopg2.errors.UniqueViolation:
             conn.rollback()
