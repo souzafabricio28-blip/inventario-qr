@@ -1,50 +1,59 @@
 {% extends "base.html" %}
 {% block title %}Início - Inventário QR{% endblock %}
 {% block content %}
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-    <a href="/scanner" class="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition border-l-4 border-blue-500">
-        <i class="fas fa-qrcode text-3xl text-blue-500 mb-3"></i>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+    <a href="/scanner" class="card bg-white rounded-2xl shadow-sm p-6 hover:-translate-y-0.5 cursor-pointer border border-slate-200/80">
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-blue-500/30 mb-4">
+            <i class="fas fa-qrcode text-xl"></i>
+        </div>
         <h2 class="font-bold text-lg">Modo Scanner</h2>
-        <p class="text-gray-600 text-sm mt-1">Leia EANs continuamente e registre contagens</p>
+        <p class="text-gray-500 text-sm mt-1">Leia EANs continuamente e registre contagens</p>
     </a>
-    <a href="/produtos" class="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition border-l-4 border-green-500">
-        <i class="fas fa-boxes text-3xl text-green-500 mb-3"></i>
+    <a href="/produtos" class="card bg-white rounded-2xl shadow-sm p-6 hover:-translate-y-0.5 cursor-pointer border border-slate-200/80">
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-400 flex items-center justify-center text-white shadow-lg shadow-emerald-500/30 mb-4">
+            <i class="fas fa-boxes text-xl"></i>
+        </div>
         <h2 class="font-bold text-lg">Produtos</h2>
-        <p class="text-gray-600 text-sm mt-1">Cadastre, edite e visualize produtos</p>
+        <p class="text-gray-500 text-sm mt-1">Cadastre, edite e visualize produtos</p>
     </a>
-    <a href="/validacao" class="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition border-l-4 border-red-500">
-        <i class="fas fa-check-double text-3xl text-red-500 mb-3"></i>
+    <a href="/validacao" class="card bg-white rounded-2xl shadow-sm p-6 hover:-translate-y-0.5 cursor-pointer border border-slate-200/80">
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-rose-500 to-red-400 flex items-center justify-center text-white shadow-lg shadow-rose-500/30 mb-4">
+            <i class="fas fa-check-double text-xl"></i>
+        </div>
         <h2 class="font-bold text-lg">Validação de Base</h2>
-        <p class="text-gray-600 text-sm mt-1">Valide a base antes da mistura (anti-erro)</p>
+        <p class="text-gray-500 text-sm mt-1">Valide a base antes da mistura (anti-erro)</p>
     </a>
-    <a href="/contagem" class="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition border-l-4 border-purple-500">
-        <i class="fas fa-chart-bar text-3xl text-purple-500 mb-3"></i>
+    <a href="/contagem" class="card bg-white rounded-2xl shadow-sm p-6 hover:-translate-y-0.5 cursor-pointer border border-slate-200/80">
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-400 flex items-center justify-center text-white shadow-lg shadow-violet-500/30 mb-4">
+            <i class="fas fa-chart-bar text-xl"></i>
+        </div>
         <h2 class="font-bold text-lg">Relatórios</h2>
-        <p class="text-gray-600 text-sm mt-1">Visualize contagens por sessão</p>
+        <p class="text-gray-500 text-sm mt-1">Visualize contagens por sessão</p>
     </a>
 </div>
 
-<div class="mt-8 bg-white rounded-xl shadow-md p-6">
-    <h3 class="font-bold text-lg mb-4"><i class="fas fa-cog"></i> Sessão Ativa</h3>
-    <div class="flex items-center space-x-4">
+<div class="mt-6 card bg-white rounded-2xl shadow-sm p-6 border border-slate-200/80">
+    <h3 class="font-bold text-lg mb-4 flex items-center gap-2 text-gray-900"><i class="fas fa-play-circle text-indigo-500"></i> Sessão Ativa</h3>
+    <div class="flex flex-wrap items-center gap-3">
         <input type="text" id="sessao_nome" placeholder="Nome da sessão"
-               class="border rounded-lg px-4 py-2 flex-1" value="">
-        <button onclick="criarSessao()" class="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">
+               class="border border-slate-200 rounded-xl px-4 py-2.5 flex-1 min-w-[220px]">
+        <button onclick="criarSessao()" class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white px-6 py-2.5 rounded-xl hover:brightness-110 font-semibold">
             <i class="fas fa-play"></i> Iniciar
         </button>
         <span id="sessao_status" class="text-sm text-gray-500"></span>
     </div>
 </div>
 
-<div class="mt-6 bg-white rounded-xl shadow-md p-6">
-    <h3 class="font-bold text-lg mb-4"><i class="fas fa-clock"></i> Últimas Sessões</h3>
+<div class="mt-5 card bg-white rounded-2xl shadow-sm p-6 border border-slate-200/80">
+    <h3 class="font-bold text-lg mb-4 flex items-center gap-2 text-gray-900"><i class="fas fa-history text-indigo-500"></i> Últimas Sessões</h3>
     <div id="lista_sessoes" class="space-y-2"></div>
 </div>
 {% endblock %}
 {% block scripts %}
 <script>
     async function carregarSessoes() {
-        const r = await fetch('/api/sessoes');
+        const loja = lojaAtual || '';
+        const r = await fetch('/api/sessoes' + (loja ? `?loja=${encodeURIComponent(loja)}` : ''));
         const sessoes = await r.json();
         const div = document.getElementById('lista_sessoes');
         if (sessoes.length === 0) {
@@ -52,8 +61,8 @@
             return;
         }
         div.innerHTML = sessoes.slice(0, 10).map(s => `
-            <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
-                <span><strong>${s.nome}</strong> - ${s.status}</span>
+            <div class="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span><strong>${s.nome}</strong>${s.loja ? ` <span class="text-xs font-semibold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full">${s.loja}</span>` : ''} · <span class="text-sm text-gray-500">${s.status}</span></span>
                 <span class="text-sm text-gray-500">${s.total_itens || 0} itens</span>
             </div>
         `).join('');
@@ -61,17 +70,18 @@
 
     async function criarSessao() {
         const nome = document.getElementById('sessao_nome').value.trim();
+        const loja = lojaAtual || 'RTJ';
         if (!nome) return alert('Digite um nome para a sessão');
         const r = await fetch('/api/sessao', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({nome})
+            body: JSON.stringify({nome, loja})
         });
         const data = await r.json();
         if (data.sucesso) {
             sessaoAtual = data.sessao;
             localStorage.setItem('sessao_atual', sessaoAtual);
-            document.getElementById('sessao_status').textContent = `Sessão ativa: ${sessaoAtual}`;
+            document.getElementById('sessao_status').textContent = `Sessão ativa: ${sessaoAtual} [${data.loja}]`;
             document.getElementById('sessao_nome').value = '';
             carregarSessoes();
         } else {

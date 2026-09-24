@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS inventario_contagem (
     data_vencimento TEXT DEFAULT '',
     data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     sessao TEXT DEFAULT '',
+    loja TEXT DEFAULT 'RTJ',
     CONSTRAINT fk_contagem_ean
         FOREIGN KEY (ean) REFERENCES produtos(ean)
 );
@@ -70,6 +71,7 @@ CREATE TABLE IF NOT EXISTS inventario_contagem (
 CREATE TABLE IF NOT EXISTS sessoes_inventario (
     id BIGSERIAL PRIMARY KEY,
     nome TEXT NOT NULL,
+    loja TEXT DEFAULT 'RTJ',
     data_abertura TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     data_fechamento TIMESTAMP,
     status TEXT DEFAULT 'aberta'
@@ -117,3 +119,9 @@ CREATE INDEX IF NOT EXISTS idx_inventario_sessao ON inventario_contagem(sessao);
 CREATE INDEX IF NOT EXISTS idx_produtos_ean ON produtos(ean);
 CREATE INDEX IF NOT EXISTS idx_validacoes_ean ON validacoes_base(ean);
 CREATE INDEX IF NOT EXISTS idx_usuarios_usuario ON usuarios(usuario);
+
+-- Migração para bancos existentes
+ALTER TABLE inventario_contagem ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT 'RTJ';
+ALTER TABLE sessoes_inventario ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT 'RTJ';
+CREATE INDEX IF NOT EXISTS idx_inventario_loja ON inventario_contagem(loja);
+CREATE INDEX IF NOT EXISTS idx_sessoes_loja ON sessoes_inventario(loja);

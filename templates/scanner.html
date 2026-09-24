@@ -4,24 +4,31 @@
 <div class="bg-white rounded-xl shadow-md p-6">
     <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div>
-            <h2 class="text-2xl font-bold"><i class="fas fa-qrcode text-blue-600"></i> Inventário — Scanner</h2>
+            <h2 class="text-2xl font-bold flex items-center gap-2"><span class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-blue-500/30"><i class="fas fa-qrcode text-base"></i></span> Inventário — Scanner</h2>
             <p class="text-gray-600 mt-1">Bipe o EAN ou o código Omie. O sistema cruza com as colunas <b>ean</b> e <b>codigo_omie</b> da lista RT oficial.</p>
             <p id="acesso_rede" class="text-xs text-gray-500 mt-1"></p>
         </div>
         <div class="flex flex-wrap gap-2">
-            <button type="button" onclick="sincronizarListaRT()" class="bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700 text-sm">
+            <button type="button" onclick="sincronizarListaRT()" class="bg-gradient-to-r from-indigo-500 to-violet-500 text-white px-3 py-2 rounded-lg hover:brightness-110 text-sm font-semibold shadow-md shadow-indigo-500/25">
                 <i class="fas fa-sync-alt"></i> Atualizar lista RT
             </button>
-            <button type="button" onclick="salvarInventario()" class="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 text-sm">
+            <button type="button" onclick="salvarInventario()" class="bg-gradient-to-r from-emerald-500 to-green-500 text-white px-3 py-2 rounded-lg hover:brightness-110 text-sm font-semibold shadow-md shadow-emerald-500/25">
                 <i class="fas fa-file-excel"></i> Salvar Excel
             </button>
-            <button type="button" onclick="imprimirInventario()" class="bg-slate-700 text-white px-3 py-2 rounded-lg hover:bg-slate-800 text-sm">
+            <button type="button" onclick="imprimirInventario()" class="bg-gradient-to-r from-slate-600 to-slate-700 text-white px-3 py-2 rounded-lg hover:brightness-110 text-sm font-semibold shadow-md shadow-slate-500/25">
                 <i class="fas fa-print"></i> Imprimir
             </button>
         </div>
     </div>
-    <div class="bg-gray-100 rounded-lg p-4 mb-4">
-        <div class="flex flex-wrap items-center gap-2 mb-2">
+    <div class="bg-gradient-to-b from-slate-50 to-slate-100/60 border border-slate-200/80 rounded-2xl p-4 mb-4">
+        <div class="flex flex-wrap items-center gap-3 mb-2">
+            <label class="text-sm font-semibold text-gray-700 flex items-center gap-1">
+                <i class="fas fa-store text-indigo-600"></i> Loja:
+            </label>
+            <select id="loja_select" onchange="trocarLoja(this.value)"
+                    class="border-2 border-indigo-300 rounded-lg px-3 py-1.5 text-sm font-semibold bg-white focus:outline-none focus:border-indigo-500">
+                <option value="">Carregando lojas…</option>
+            </select>
             <span id="sessao_display" class="text-sm bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full"></span>
             <span id="contador" class="text-sm bg-green-100 text-green-800 px-3 py-1 rounded-full">0 leituras</span>
             <span id="itens_unicos" class="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full">0 itens</span>
@@ -32,10 +39,10 @@
         </div>
         <div class="flex gap-2">
             <input type="text" id="ean_input" autofocus
-                   class="ean-input flex-1 border-2 border-blue-300 rounded-lg px-4 py-3 focus:border-blue-500 focus:outline-none"
+                   class="ean-input flex-1 border-2 border-indigo-200 bg-white rounded-xl px-4 py-3 shadow-sm focus:border-indigo-400 focus:outline-none"
                    placeholder="Leia o código de barras / QR...">
             <button type="button" onclick="toggleCamera()"
-                    class="shrink-0 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 font-semibold"
+                    class="shrink-0 bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-4 py-3 rounded-xl hover:brightness-110 font-semibold shadow-lg shadow-blue-500/30"
                     title="Abrir câmera em bip contínuo">
                 <i class="fas fa-barcode"></i>
                 <span class="hidden sm:inline ml-1">Bipar</span>
@@ -119,6 +126,42 @@
     const qtyPorEan = {};
     let rtSincronizado = false;
 
+    async function carregarLojas() {
+        const select = document.getElementById('loja_select');
+        try {
+            const r = await fetch('/api/lojas', { cache: 'no-store' });
+            const lojas = await r.json();
+            if (!Array.isArray(lojas) || !lojas.length) {
+                select.innerHTML = '<option value="RTJ">RTJ</option>';
+                if (document.getElementById('rt_status')) return;
+                return;
+            }
+            select.innerHTML = lojas.map(l =>
+                `<option value="${l.codigo}">${l.codigo} — ${l.nome}</option>`
+            ).join('');
+            select.value = lojaAtual;
+        } catch (err) {
+            select.innerHTML = '<option value="RTJ">RTJ</option><option value="RTB">RTB</option>';
+            select.value = lojaAtual || 'RTJ';
+        }
+    }
+
+    function trocarLoja(codigo) {
+        if (!codigo) return;
+        lojaAtual = codigo;
+        localStorage.setItem('loja_atual', lojaAtual);
+        sessaoAtual = '';
+        localStorage.removeItem('sessao_atual');
+        _liveSig = '';
+        document.getElementById('sessao_display').textContent = '';
+        document.getElementById('resumo_sessao').innerHTML =
+            '<div class="px-4 py-6 text-center text-gray-400 text-sm">Troque de loja — nova sessão será criada no próximo bip</div>';
+        document.getElementById('itens_unicos').textContent = '0 itens';
+        totalLeituras = 0;
+        atualizarContador();
+        mostrarToast('Loja selecionada: ' + lojaAtual, 'sucesso');
+    }
+
     document.getElementById('ean_input').addEventListener('keydown', async function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -137,7 +180,7 @@
         const nome = 'inventario_' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '_' + Date.now().toString().slice(-4);
         const r = await fetch('/api/sessao', {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({nome})
+            body:JSON.stringify({nome, loja: lojaAtual})
         });
         const data = await r.json();
         if (data.sucesso) {
@@ -215,12 +258,12 @@
 
     function salvarInventario() {
         if (!sessaoAtual) return mostrarToast('Nenhuma sessão ativa', 'erro');
-        window.location.href = `/api/exportar/contagem?sessao=${encodeURIComponent(sessaoAtual)}&cruzar=0`;
+        window.location.href = `/api/exportar/contagem?sessao=${encodeURIComponent(sessaoAtual)}&cruzar=0&loja=${encodeURIComponent(lojaAtual)}`;
     }
 
     function imprimirInventario() {
         if (!sessaoAtual) return mostrarToast('Nenhuma sessão ativa', 'erro');
-        window.open(`/api/relatorio?sessao=${encodeURIComponent(sessaoAtual)}&cruzar=0`, '_blank');
+        window.open(`/api/relatorio?sessao=${encodeURIComponent(sessaoAtual)}&cruzar=0&loja=${encodeURIComponent(lojaAtual)}`, '_blank');
     }
 
     async function processarLeitura(ean, opts) {
@@ -251,7 +294,7 @@
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 cache: 'no-store',
-                body: JSON.stringify({ codigo: ean, sessao: sessaoAtual }),
+                body: JSON.stringify({ codigo: ean, sessao: sessaoAtual, loja: lojaAtual }),
             });
             data = await r.json();
             if (!r.ok && !data.encontrado) {
@@ -551,7 +594,7 @@
         } catch (_) {}
         _liveBusy = true;
         try {
-            const r = await fetch('/api/scanner/live?seguir=1', { cache: 'no-store' });
+            const r = await fetch(`/api/scanner/live?seguir=1&loja=${encodeURIComponent(lojaAtual)}`, { cache: 'no-store' });
             const d = await r.json();
             if (!d || d.sig == null) return;
 
@@ -560,6 +603,13 @@
                 localStorage.setItem('sessao_atual', sessaoAtual);
                 const sd = document.getElementById('sessao_display');
                 if (sd) sd.textContent = `Sessão: ${sessaoAtual}`;
+                const lj = d.loja || lojaAtual;
+                if (lj && lj !== lojaAtual) {
+                    lojaAtual = lj;
+                    localStorage.setItem('loja_atual', lojaAtual);
+                    const select = document.getElementById('loja_select');
+                    if (select) select.value = lojaAtual;
+                }
             }
 
             const badge = document.getElementById('live_badge');
@@ -603,6 +653,7 @@
     window.processarLeitura = processarLeitura;
 
     (async function initScanner() {
+        await carregarLojas();
         await carregarStatusRT();
         mostrarAcessoRede();
         if (sessaoAtual) {

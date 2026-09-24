@@ -15,7 +15,7 @@
 </head>
 <body>
     <h1>Relatório de Contagem × Omie</h1>
-    <p>Sessão: {{ sessao }} | Emitido: {{ emitido_em }}</p>
+    <p>Sessão: {{ sessao }}{% if nome_loja %} | Loja: {{ nome_loja }} ({{ loja }}){% elif loja %} | Loja: {{ loja }}{% endif %} | Emitido: {{ emitido_em }}</p>
     <p>Cadastro: {{ contagens|length }} |
        Contados: {{ contados }} |
        Pendentes: {{ pendentes }} |
@@ -23,13 +23,14 @@
     <table>
         <thead>
             <tr>
-                <th>Cód. Omie</th><th>EAN</th><th>Produto</th><th>Marca</th>
+                <th>Loja</th><th>Cód. Omie</th><th>EAN</th><th>Produto</th><th>Marca</th>
                 <th>Lote</th><th>Vencimento</th><th>Estoque</th><th>Contado</th><th>Status</th>
             </tr>
         </thead>
         <tbody>
             {% for c in contagens %}
             <tr class="{{ 'pendente' if c.total_contado == 0 else '' }}">
+                <td>{{ c.loja or loja or '' }}</td>
                 <td>{{ c.codigo_omie or c.codigo_interno or c.ean }}</td>
                 <td>{{ c.ean }}</td>
                 <td>{{ c.produto }}</td>

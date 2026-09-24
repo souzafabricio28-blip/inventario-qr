@@ -117,6 +117,21 @@ def qtd_contagem_sessao(ean, sessao=""):
     return int(row["qtd"] if hasattr(row, "keys") else row[0])
 
 
+def loja_da_sessao(nome):
+    """Retorna a loja da sessão (ou '' se a sessão não existir)."""
+    nome = (nome or "").strip()
+    if not nome:
+        return ""
+    with get_db() as conn:
+        cur = _exec(conn,
+            "SELECT loja FROM sessoes_inventario WHERE nome = %s LIMIT 1",
+            (nome,))
+        row = cur.fetchone()
+    if not row:
+        return ""
+    return row["loja"] if isinstance(row, dict) else row[0]
+
+
 def criar_produto(ean, produto, marca="", unidade_medida="UN",
                   base_especifica="", instrucao_dosagem="",
                   lote="", data_vencimento="", codigo_interno=""):
@@ -213,16 +228,20 @@ def atualizar_produto(ean, ean_novo=None, **kwargs):
             return False, str(e)
 
 
-def registrar_contagem(ean, quantidade=1, sessao="", lote="", data_vencimento=""):
+def registrar_contagem(ean, quantidade=1, sessao="", lote="", data_vencimento="", loja=""):
+    if not loja and sessao:
+        loja = loja_da_sessao(sessao)
+    if not loja:
+        loja = "RTJ"
     with get_db() as conn:
         _exec(conn,
-            """INSERT INTO inventario_contagem (ean, quantidade_contada, sessao, lote, data_vencimento)
-               VALUES (%s, %s, %s, %s, %s)""",
-            (ean, quantidade, sessao, lote, data_vencimento))
+            """INSERT INTO inventario_contagem (ean, quantidade_contada, sessao, lote, data_vencimento, loja)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (ean, quantidade, sessao, lote, data_vencimento, loja))
         conn.commit()
 
 
-def definir_contagem_sessao(ean, quantidade, sessao, lote="", data_vencimento=""):
+def definir_contagem_sessao(ean, quantidade, sessao, lote="", data_vencimento="", loja=""):
     """Define a quantidade total do item na sessão (substitui leituras anteriores)."""
     ean = (ean or "").strip()
     sessao = (sessao or "").strip()
@@ -235,15 +254,18 @@ def definir_contagem_sessao(ean, quantidade, sessao, lote="", data_vencimento=""
     if quantidade < 0:
         return False, "Quantidade não pode ser negativa"
 
+    if not loja:
+        loja = loja_da_sessao(sessao) or "RTJ"
+
     with get_db() as conn:
         _exec(conn,
             "DELETE FROM inventario_contagem WHERE ean = %s AND sessao = %s",
             (ean, sessao))
         if quantidade > 0:
             _exec(conn,
-                """INSERT INTO inventario_contagem (ean, quantidade_contada, sessao, lote, data_vencimento)
-                   VALUES (%s, %s, %s, %s, %s)""",
-                (ean, quantidade, sessao, lote or "", data_vencimento or ""))
+                """INSERT INTO inventario_contagem (ean, quantidade_contada, sessao, lote, data_vencimento, loja)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (ean, quantidade, sessao, lote or "", data_vencimento or "", loja))
         conn.commit()
     return True, quantidade
 
@@ -339,15 +361,17 @@ def aplicar_contagem_como_estoque(sessao, zerar_nao_contados=False):
     return True, msg
 
 
-def get_contagens(sessao="", cruzar=False):
+def get_contagens(sessao="", cruzar=False, loja=""):
     """Lista contagens. Se cruzar=True, inclui todo o cadastro (Omie) com qtd 0."""
+    loja = (loja or "").strip()
     cols = (
         "p.ean, COALESCE(NULLIF(p.codigo_interno, ''), p.ean) as codigo_omie, "
         "p.codigo_interno, p.produto, p.marca, p.base_especifica, "
         "p.lote, p.data_vencimento, "
         "COALESCE(p.quantidade_estoque, 0) as quantidade_estoque, "
         "COALESCE(SUM(i.quantidade_contada), 0) as total_contado, "
-        "MAX(i.data_hora) as ultima_leitura"
+        "MAX(i.data_hora) as ultima_leitura, "
+        "MAX(i.loja) as loja"
     )
     group = (
         "p.ean, p.codigo_interno, p.produto, p.marca, p.base_especifica, "
@@ -362,6 +386,13 @@ def get_contagens(sessao="", cruzar=False):
                     f"GROUP BY {group} "
                     f"ORDER BY CASE WHEN COALESCE(SUM(i.quantidade_contada), 0) = 0 THEN 1 ELSE 0 END, p.produto",
                     (sessao,))
+            elif loja:
+                cur = _exec(conn,
+                    f"SELECT {cols} FROM produtos p "
+                    f"LEFT JOIN inventario_contagem i ON i.ean = p.ean AND (i.loja = %s OR i.id IS NULL) "
+                    f"GROUP BY {group} "
+                    f"ORDER BY CASE WHEN COALESCE(SUM(i.quantidade_contada), 0) = 0 THEN 1 ELSE 0 END, p.produto",
+                    (loja,))
             else:
                 cur = _exec(conn,
                     f"SELECT {cols} FROM produtos p "
@@ -375,21 +406,35 @@ def get_contagens(sessao="", cruzar=False):
                 f"WHERE i.sessao = %s "
                 f"GROUP BY {group} ORDER BY COALESCE(SUM(i.quantidade_contada), 0) DESC",
                 (sessao,))
+        elif loja:
+            cur = _exec(conn,
+                f"SELECT {cols} FROM inventario_contagem i "
+                f"JOIN produtos p ON i.ean = p.ean "
+                f"WHERE i.loja = %s "
+                f"GROUP BY {group} ORDER BY COALESCE(SUM(i.quantidade_contada), 0) DESC",
+                (loja,))
         else:
             cur = _exec(conn,
                 f"SELECT {cols} FROM inventario_contagem i "
                 f"JOIN produtos p ON i.ean = p.ean "
                 f"GROUP BY {group} ORDER BY COALESCE(SUM(i.quantidade_contada), 0) DESC")
         result = [dict(r) for r in cur.fetchall()]
+    if sessao and not cruzar:
+        loja_sessao = loja_da_sessao(sessao)
+        for r in result:
+            r["loja"] = loja_sessao
     for r in result:
         r["total_contado"] = int(r.get("total_contado") or 0)
+        r["loja"] = r.get("loja") or ""
         r["status"] = "contado" if r["total_contado"] > 0 else "pendente"
     return result
 
 
-def criar_sessao(nome):
+def criar_sessao(nome, loja="RTJ"):
     with get_db() as conn:
-        cur = _exec(conn, "INSERT INTO sessoes_inventario (nome) VALUES (%s) RETURNING id", (nome,))
+        cur = _exec(conn,
+            "INSERT INTO sessoes_inventario (nome, loja) VALUES (%s, %s) RETURNING id",
+            (nome, loja or "RTJ"))
         conn.commit()
         return cur.fetchone()["id"]
 
@@ -440,32 +485,48 @@ def sessao_esta_aberta(nome):
     return (row["status"] if isinstance(row, dict) else row[0]) == "aberta"
 
 
-def sessao_mais_ativa():
+def sessao_mais_ativa(loja=""):
     """Sessão com leitura mais recente (aberta ou ainda sem registro formal)."""
+    loja = (loja or "").strip()
+    where_loja = "AND i.loja = %s" if loja else ""
+    params = (loja,) if loja else ()
     with get_db() as conn:
         cur = _exec(conn,
-            """SELECT i.sessao AS nome
+            f"""SELECT i.sessao AS nome, MAX(i.loja) AS loja
                FROM inventario_contagem i
                LEFT JOIN sessoes_inventario s ON s.nome = i.sessao
                WHERE COALESCE(i.sessao, '') <> ''
+                 {where_loja}
                  AND (s.status = 'aberta' OR s.id IS NULL)
                GROUP BY i.sessao
                ORDER BY MAX(i.data_hora) DESC
-               LIMIT 1""")
+               LIMIT 1""",
+            params)
         row = cur.fetchone()
     if not row:
         return ""
     return (row["nome"] if isinstance(row, dict) else row[0]) or ""
 
 
-def listar_sessoes():
+def listar_sessoes(loja=""):
+    loja = (loja or "").strip()
     with get_db() as conn:
-        cur = _exec(conn,
-            """SELECT s.*,
-                      (SELECT COUNT(*) FROM inventario_contagem
-                       WHERE sessao = s.nome) as total_itens
-               FROM sessoes_inventario s
-               ORDER BY data_abertura DESC""")
+        if loja:
+            cur = _exec(conn,
+                """SELECT s.*,
+                          (SELECT COUNT(*) FROM inventario_contagem
+                           WHERE sessao = s.nome) as total_itens
+                   FROM sessoes_inventario s
+                   WHERE s.loja = %s
+                   ORDER BY data_abertura DESC""",
+                (loja,))
+        else:
+            cur = _exec(conn,
+                """SELECT s.*,
+                          (SELECT COUNT(*) FROM inventario_contagem
+                           WHERE sessao = s.nome) as total_itens
+                   FROM sessoes_inventario s
+                   ORDER BY data_abertura DESC""")
         return [dict(r) for r in cur.fetchall()]
 
 

@@ -92,12 +92,14 @@ def criar_tabelas():
             data_vencimento TEXT DEFAULT '',
             data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             sessao TEXT DEFAULT '',
+            loja TEXT DEFAULT 'RTJ',
             FOREIGN KEY (ean) REFERENCES produtos(ean)
         );
 
         CREATE TABLE IF NOT EXISTS sessoes_inventario (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
+            loja TEXT DEFAULT 'RTJ',
             data_abertura TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             data_fechamento TIMESTAMP,
             status TEXT DEFAULT 'aberta'
@@ -139,6 +141,15 @@ def migrar_banco(conn):
         cursor.execute("ALTER TABLE inventario_contagem ADD COLUMN lote TEXT DEFAULT ''")
     if "data_vencimento" not in existing_cont:
         cursor.execute("ALTER TABLE inventario_contagem ADD COLUMN data_vencimento TEXT DEFAULT ''")
+    if "loja" not in existing_cont:
+        cursor.execute("ALTER TABLE inventario_contagem ADD COLUMN loja TEXT DEFAULT 'RTJ'")
+
+    existing_sess = [row[1] for row in cursor.execute("PRAGMA table_info(sessoes_inventario)").fetchall()]
+    if "loja" not in existing_sess:
+        cursor.execute("ALTER TABLE sessoes_inventario ADD COLUMN loja TEXT DEFAULT 'RTJ'")
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_inventario_loja ON inventario_contagem(loja)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessoes_loja ON sessoes_inventario(loja)")
 
     if "codigo_interno" not in existing:
         cursor.execute("ALTER TABLE produtos ADD COLUMN codigo_interno TEXT DEFAULT ''")

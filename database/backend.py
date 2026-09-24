@@ -21,7 +21,7 @@ if PG_ATIVO:
         qtd_contagem_sessao, vincular_codigo,
         definir_contagem_sessao, excluir_contagem_sessao,
         aplicar_contagem_como_estoque, zerar_contagens,
-        sessao_mais_ativa,
+        sessao_mais_ativa, loja_da_sessao,
     )
 else:
     from .schema import criar_conexao, criar_tabelas, get_db, get_db_path, DB_PATH
@@ -42,7 +42,7 @@ else:
         qtd_contagem_sessao, vincular_codigo,
         definir_contagem_sessao, excluir_contagem_sessao,
         aplicar_contagem_como_estoque, zerar_contagens,
-        sessao_mais_ativa,
+        sessao_mais_ativa, loja_da_sessao,
     )
 
 

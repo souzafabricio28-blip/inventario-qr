@@ -5,6 +5,11 @@
     <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
         <h2 class="text-2xl font-bold"><i class="fas fa-chart-bar text-purple-600"></i> Contagem × Estoque</h2>
         <div class="flex flex-wrap items-center gap-2">
+            <select id="select_loja" class="border rounded-lg px-3 py-2 text-sm font-semibold" onchange="onLojaChange()">
+                <option value="">Todas as lojas</option>
+                <option value="RTJ">RTJ</option>
+                <option value="RTB">RTB</option>
+            </select>
             <select id="select_sessao" class="border rounded-lg px-3 py-2 text-sm" onchange="onSessaoChange()">
                 <option value="">Todas as sessões</option>
             </select>
@@ -45,15 +50,16 @@
         <table class="w-full text-sm">
             <thead>
                 <tr class="bg-gray-50 text-left">
-                    <th class="px-2 py-2 sortable" onclick="ordenar(0)">Cód. Omie</th>
-                    <th class="px-2 py-2 sortable" onclick="ordenar(1)">EAN</th>
-                    <th class="px-2 py-2 sortable" onclick="ordenar(2)">Produto</th>
-                    <th class="px-2 py-2 sortable" onclick="ordenar(3)">Marca</th>
-                    <th class="px-2 py-2 sortable" onclick="ordenar(4)">Lote</th>
-                    <th class="px-2 py-2 sortable" onclick="ordenar(5)">Vencimento</th>
-                    <th class="px-2 py-2 sortable" onclick="ordenar(6)">Estoque</th>
-                    <th class="px-2 py-2 sortable" onclick="ordenar(7)">Contado</th>
-                    <th class="px-2 py-2 sortable" onclick="ordenar(8)">Status</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(0)">Loja</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(1)">Cód. Omie</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(2)">EAN</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(3)">Produto</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(4)">Marca</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(5)">Lote</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(6)">Vencimento</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(7)">Estoque</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(8)">Contado</th>
+                    <th class="px-2 py-2 sortable" onclick="ordenar(9)">Status</th>
                 </tr>
             </thead>
             <tbody id="tabela_contagem" class="divide-y"></tbody>
@@ -69,17 +75,41 @@
 
     let mapaSessoes = {};
 
+    function lojaSelecionada() {
+        return document.getElementById('select_loja').value || '';
+    }
+
+    async function carregarLojasContagem() {
+        const sel = document.getElementById('select_loja');
+        try {
+            const r = await fetch('/api/lojas', { cache: 'no-store' });
+            const lojas = await r.json();
+            if (Array.isArray(lojas) && lojas.length) {
+                sel.innerHTML = '<option value="">Todas as lojas</option>' +
+                    lojas.map(l => `<option value="${l.codigo}">${l.codigo} — ${l.nome}</option>`).join('');
+            }
+        } catch (_) {}
+        if (lojaAtual && Array.from(sel.options).some(o => o.value === lojaAtual)) sel.value = lojaAtual;
+    }
+
     async function carregarSessoes() {
-        const r1 = await fetch('/api/sessoes');
+        const loja = lojaSelecionada();
+        const r1 = await fetch(`/api/sessoes?loja=${encodeURIComponent(loja)}`);
         const sessoes = await r1.json();
         mapaSessoes = {};
         (sessoes || []).forEach(s => { mapaSessoes[s.nome] = s; });
         const selS = document.getElementById('select_sessao');
         const atual = selS.value;
         selS.innerHTML = '<option value="">Todas as sessões</option>' +
-            sessoes.map(s => `<option value="${s.nome}">${s.nome} (${s.status})</option>`).join('');
+            sessoes.map(s => `<option value="${s.nome}">${s.nome}${s.loja ? ' [' + s.loja + ']' : ''} (${s.status})</option>`).join('');
         if (atual && mapaSessoes[atual]) selS.value = atual;
         atualizarBotaoEncerrar();
+    }
+
+    function onLojaChange() {
+        document.getElementById('select_sessao').value = '';
+        carregarSessoes();
+        carregarContagem();
     }
 
     function onSessaoChange() {
@@ -200,7 +230,8 @@
     async function carregarContagem() {
         const sessao = document.getElementById('select_sessao').value;
         const cruzar = document.getElementById('chk_cruzar').checked ? '1' : '0';
-        const r = await fetch(`/api/contagem?sessao=${encodeURIComponent(sessao)}&cruzar=${cruzar}`);
+        const loja = lojaSelecionada();
+        const r = await fetch(`/api/contagem?sessao=${encodeURIComponent(sessao)}&cruzar=${cruzar}&loja=${encodeURIComponent(loja)}`);
         const data = await r.json();
         contagens = Array.isArray(data) ? data : [];
         renderTabela();
@@ -216,15 +247,15 @@
         const tbody = document.getElementById('tabela_contagem');
         const lista = filtradas();
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-gray-400">Nenhuma contagem</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-gray-400">Nenhuma contagem</td></tr>';
             document.getElementById('resumo_contagem').textContent = '';
             return;
         }
-        const keys = ['codigo_omie','ean','produto','marca','lote','data_vencimento','quantidade_estoque','total_contado','status'];
+        const keys = ['loja','codigo_omie','ean','produto','marca','lote','data_vencimento','quantidade_estoque','total_contado','status'];
         const sorted = [...lista].sort((a,b) => {
             const va = (a[keys[colOrd]]??'').toString().toUpperCase();
             const vb = (b[keys[colOrd]]??'').toString().toUpperCase();
-            if (colOrd === 6 || colOrd === 7) {
+            if (colOrd === 7 || colOrd === 8) {
                 return ascOrd ? (Number(a[keys[colOrd]]||0) - Number(b[keys[colOrd]]||0))
                               : (Number(b[keys[colOrd]]||0) - Number(a[keys[colOrd]]||0));
             }
@@ -237,6 +268,7 @@
             const pend = (c.total_contado||0) === 0;
             return `
             <tr style="background:${pend ? '#1e3a5f' : '#1e40af'}">
+                <td class="px-2 py-2 font-bold text-xs" style="color:#93c5fd">${c.loja || '-'}</td>
                 <td class="px-2 py-2 font-mono text-xs font-bold" style="color:#ffffff">${c.codigo_omie || c.codigo_interno || c.ean}</td>
                 <td class="px-2 py-2 font-mono text-xs" style="color:#e0e7ff">${c.ean}</td>
                 <td class="px-2 py-2 font-medium" style="color:#ffffff">${c.produto}</td>
@@ -322,15 +354,18 @@
     function exportarExcel() {
         const sessao = document.getElementById('select_sessao').value;
         const cruzar = document.getElementById('chk_cruzar').checked ? '1' : '0';
-        window.location.href = `/api/exportar/contagem?sessao=${encodeURIComponent(sessao)}&cruzar=${cruzar}`;
+        const loja = lojaSelecionada();
+        window.location.href = `/api/exportar/contagem?sessao=${encodeURIComponent(sessao)}&cruzar=${cruzar}&loja=${encodeURIComponent(loja)}`;
     }
 
     function exportarPDF() {
         const sessao = document.getElementById('select_sessao').value;
         const cruzar = document.getElementById('chk_cruzar').checked ? '1' : '0';
-        window.open(`/api/relatorio?sessao=${encodeURIComponent(sessao)}&cruzar=${cruzar}`, '_blank');
+        const loja = lojaSelecionada();
+        window.open(`/api/relatorio?sessao=${encodeURIComponent(sessao)}&cruzar=${cruzar}&loja=${encodeURIComponent(loja)}`, '_blank');
     }
 
+    carregarLojasContagem();
     carregarSessoes();
     const filtroUrl = new URLSearchParams(location.search).get('filtro');
     if (filtroUrl === 'contado' || filtroUrl === 'pendente') {
