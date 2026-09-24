@@ -2,6 +2,13 @@
 {% block title %}Contagem - Inventário QR{% endblock %}
 {% block content %}
 <div class="bg-white rounded-xl shadow-md p-6">
+    <div id="aviso_geral_inventario" class="flex items-start gap-3 bg-amber-100 border border-amber-300 rounded-xl px-4 py-3 mb-4 text-sm text-amber-900">
+        <i class="fas fa-triangle-exclamation text-amber-600 text-xl mt-0.5"></i>
+        <div>
+            <b>Ao aplicar como estoque, o saldo da loja vira exatamente o que foi contado.</b><br>
+            Para <b>inventário GERAL</b> (físico completo), deixe marcado <b>"Zerar os não contados"</b> — os produtos que NÃO foram bipados ficam com estoque <b>0</b>.
+        </div>
+    </div>
     <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
         <h2 class="text-2xl font-bold"><i class="fas fa-chart-bar text-purple-600"></i> Contagem × Estoque</h2>
         <div class="flex flex-wrap items-center gap-2">
@@ -66,6 +73,42 @@
         </table>
     </div>
     <div id="resumo_contagem" class="mt-4 text-sm text-gray-600"></div>
+</div>
+
+<!-- Modal: aplicar contagem como estoque -->
+<div id="modal_aplicar" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
+        <div class="text-right">
+            <button onclick="fecharAplicar()" class="text-gray-400 hover:text-gray-600 text-xl leading-none"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="flex items-center gap-2 mb-3">
+            <i class="fas fa-triangle-exclamation text-amber-500 text-2xl"></i>
+            <h3 class="text-lg font-bold">Aplicar como ESTOQUE da loja</h3>
+        </div>
+        <p class="text-sm text-gray-600 mb-3">
+            Sessão: <b id="ap_sessao"></b> · Loja: <b id="ap_loja"></b>
+        </p>
+        <ul class="text-sm text-gray-600 space-y-1 mb-4 list-disc pl-5">
+            <li>Produtos contados → quantidade vira o <b>estoque oficial</b> da loja</li>
+            <li>Entradas (NF-e) depois: <b>SOMAM</b> nesse estoque</li>
+            <li>Saídas: <b>DIMINUEM</b> o estoque da loja</li>
+        </ul>
+        <div class="bg-amber-50 border border-amber-300 rounded-xl p-3 text-sm mb-4">
+            <i class="fas fa-exclamation-circle text-amber-600"></i> <b>Aviso:</b> produtos desta loja que
+            <b>NÃO</b> foram contados nesta sessão ficarão com estoque <b>ZERO</b> se você marcar a opção abaixo.
+        </div>
+        <label class="flex items-start gap-2 text-sm mb-5 cursor-pointer">
+            <input type="checkbox" id="chk_zerar_nao_contados" checked class="mt-0.5">
+            <span><b>Zerar os não contados</b> — para inventário GERAL (físico completo).<br>
+            <span class="text-gray-500">Desmarque apenas para contagem parcial (mantém estoque antigo dos não bipados).</span></span>
+        </label>
+        <div class="flex gap-2">
+            <button onclick="confirmarAplicarEstoque()" class="flex-1 bg-blue-600 text-white py-2.5 rounded-xl font-bold hover:bg-blue-700">
+                <i class="fas fa-warehouse"></i> Aplicar → Estoque
+            </button>
+            <button onclick="fecharAplicar()" class="px-4 bg-gray-200 text-gray-700 py-2.5 rounded-xl hover:bg-gray-300">Cancelar</button>
+        </div>
+    </div>
 </div>
 {% endblock %}
 {% block scripts %}
@@ -315,25 +358,28 @@
         }
     }
 
-    async function aplicarComoEstoque() {
+    function aplicarComoEstoque() {
         const sessao = document.getElementById('select_sessao').value;
         if (!sessao) {
             alert('Selecione uma sessão de inventário antes de aplicar.');
             return;
         }
         const loja = lojaSelecionada();
-        const nomeLoja = loja || 'da sessão';
-        if (!confirm(
-            'Aplicar a contagem da sessão "' + sessao + '" como ESTOQUE DA LOJA ' + (loja || 'da sessão') + '?\n\n' +
-            '• Produtos contados: quantidade vira o estoque oficial da loja\n' +
-            '• Entradas (NF-e) depois: SOMAM nesse estoque\n' +
-            '• Saídas: DIMINUEM o estoque da loja'
-        )) return;
+        document.getElementById('ap_sessao').textContent = sessao;
+        document.getElementById('ap_loja').textContent = loja ? loja : 'da sessão';
+        document.getElementById('chk_zerar_nao_contados').checked = true;
+        document.getElementById('modal_aplicar').classList.remove('hidden');
+    }
 
-        const zerarNao = confirm(
-            'Zerar estoque dos produtos NÃO contados nesta sessão?\n\n' +
-            'OK = sim, zerar não bipados\nCancelar = manter estoque antigo deles'
-        );
+    function fecharAplicar() {
+        document.getElementById('modal_aplicar').classList.add('hidden');
+    }
+
+    async function confirmarAplicarEstoque() {
+        const sessao = document.getElementById('select_sessao').value;
+        const loja = lojaSelecionada();
+        const zerarNao = document.getElementById('chk_zerar_nao_contados').checked;
+        fecharAplicar();
         try {
             const r = await fetch('/api/contagem/aplicar-estoque', {
                 method: 'POST',
