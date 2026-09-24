@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Inv QR">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#4338ca">
+    <meta name="theme-color" content="#7c3aed">
     <link rel="manifest" href="/static/manifest.json">
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png">
@@ -19,16 +19,39 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; transition: background 0.3s, color 0.3s;
-            background:
-                radial-gradient(1200px 500px at 85% -10%, rgba(99,102,241,0.10), transparent 60%),
-                radial-gradient(900px 420px at -10% 0%, rgba(16,185,129,0.07), transparent 55%),
-                #f8fafc; background-attachment: fixed; }
+body {
+        font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; transition: background 0.3s, color 0.3s;
+        background:
+            radial-gradient(1100px 520px at 110% -5%, rgba(236, 72, 153, 0.18), transparent 55%),
+            radial-gradient(900px 480px at -15% 0%, rgba(34, 211, 238, 0.16), transparent 50%),
+            radial-gradient(1000px 620px at 55% 120%, rgba(168, 85, 247, 0.20), transparent 60%),
+            linear-gradient(180deg, #fdf4ff 0%, #f5f3ff 45%, #f0f9ff 100%);
+        background-attachment: fixed;
+        position: relative;
+    }
+        /* Blobs de brilho decorativos (glass) */
+        body::before, body::after {
+            content: ""; position: fixed; z-index: 0; border-radius: 50%;
+            filter: blur(90px); pointer-events: none;
+        }
+        body::before {
+            width: 480px; height: 480px; top: -150px; right: -120px;
+            background: radial-gradient(circle, rgba(217, 70, 239, 0.38), transparent 70%);
+        }
+        body::after {
+            width: 520px; height: 520px; bottom: -200px; left: -150px;
+            background: radial-gradient(circle, rgba(34, 211, 238, 0.32), transparent 70%);
+        }
+        body.dark::before { background: radial-gradient(circle, rgba(217, 70, 239, 0.42), transparent 70%); }
+        body.dark::after { background: radial-gradient(circle, rgba(6, 182, 212, 0.34), transparent 70%); }
+        main { position: relative; z-index: 1; }
         body.dark { background:
-            radial-gradient(1200px 500px at 85% -10%, rgba(99,102,241,0.16), transparent 60%),
-            radial-gradient(900px 420px at -10% 0%, rgba(16,185,129,0.08), transparent 55%),
-            #0f172a; color: #f3f4f6; }
-        body.dark .bg-white { background: #1e293b; }
+            radial-gradient(1100px 520px at 110% -5%, rgba(236, 72, 153, 0.22), transparent 55%),
+            radial-gradient(900px 480px at -15% 0%, rgba(34, 211, 238, 0.18), transparent 50%),
+            radial-gradient(1000px 620px at 55% 120%, rgba(168, 85, 247, 0.28), transparent 60%),
+            linear-gradient(180deg, #17122b 0%, #0f172a 55%, #101226 100%);
+            color: #f3f4f6; }
+        body.dark .bg-white { background: rgba(30, 27, 52, 0.55); backdrop-filter: blur(14px); }
         body.dark .text-gray-600 { color: #93c5fd !important; } /* AZUL CLARO (era d1d5db quase-branco) */
         body.dark .text-gray-500 { color: #93c5fd !important; } /* AZUL CLARO (era d1d5db quase-branco) */
         body.dark .text-gray-400 { color: #7dd3fc !important; }
@@ -85,74 +108,151 @@ body.dark .sortable:hover { background-color: #475569; }
         .kiosk-btn { position: fixed; bottom: 20px; right: 20px; z-index: 999; opacity: 0.5; }
         .kiosk-btn:hover { opacity: 1; }
 
-        /* ── Skin SaaS moderna ─────────────────────────────── */
-        /* Cards principais: borda sutil + sombra suave */
+        /* ── Skin Glass Colorido ────────────────────────────── */
+        /* Cards principais: vidro translúcido + blur + sombra colorida */
         main .bg-white.rounded-xl.shadow-md,
         main .bg-white.rounded-lg.shadow,
-        main .bg-white.rounded-lg.shadow-md {
-            border: 1px solid rgba(226, 232, 240, 0.9);
-            border-radius: 1.25rem;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 32px -18px rgba(79, 70, 229, 0.35);
-            transition: box-shadow 0.2s ease, transform 0.2s ease;
+        main .bg-white.rounded-lg.shadow-md,
+        main .bg-white.p-6.rounded-xl,
+        main .bg-white.rounded-xl.p-6,
+        main .bg-white.rounded-xl {
+            background: rgba(255, 255, 255, 0.72);
+            -webkit-backdrop-filter: blur(14px) saturate(150%);
+            backdrop-filter: blur(14px) saturate(150%);
+            border: 1px solid rgba(255, 255, 255, 0.85);
+            border-radius: 1.5rem;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04),
+                        0 22px 46px -24px rgba(236, 72, 153, 0.30),
+                        0 12px 34px -22px rgba(168, 85, 247, 0.26);
+            transition: box-shadow 0.25s ease, transform 0.25s ease, background 0.25s ease;
+        }
+        main .bg-white.rounded-xl.shadow-md:hover,
+        main .bg-white.rounded-lg.shadow:hover,
+        main .bg-white.rounded-lg.shadow-md:hover {
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04),
+                        0 30px 60px -24px rgba(217, 70, 239, 0.40),
+                        0 16px 44px -22px rgba(34, 211, 238, 0.30);
+            transform: translateY(-1px);
         }
         body.dark main .bg-white.rounded-xl.shadow-md,
         body.dark main .bg-white.rounded-lg.shadow,
-        body.dark main .bg-white.rounded-lg.shadow-md {
-            border-color: rgba(71, 85, 105, 0.6);
+        body.dark main .bg-white.rounded-lg.shadow-md,
+        body.dark main .bg-white.p-6.rounded-xl,
+        body.dark main .bg-white.rounded-xl.p-6,
+        body.dark main .bg-white.rounded-xl {
+            background: rgba(30, 27, 52, 0.55);
+            border-color: rgba(168, 85, 247, 0.28);
+            box-shadow: 0 22px 46px -24px rgba(168, 85, 247, 0.35);
         }
-        main .bg-white.p-6.rounded-xl,
-        main .bg-white.rounded-xl.p-6 { border: 1px solid rgba(226,232,240,0.9); border-radius: 1.25rem; }
 
-        /* Inputs e selects: cantos suaves + anel de foco */
+        /* Inputs e selects: vidro + cantos suaves + anel de foco colorido */
         main input, main select, main textarea {
-            border-radius: 0.625rem;
-            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            border-radius: 0.8rem;
+            background: rgba(255, 255, 255, 0.72);
+            border-color: rgba(168, 85, 247, 0.18);
+            -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px);
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        }
+        body.dark main input, body.dark main select, body.dark main textarea {
+            background: rgba(51, 45, 80, 0.45);
+            border-color: rgba(168, 85, 247, 0.30);
         }
         main input:focus, main select:focus, main textarea:focus {
             outline: none;
-            border-color: #818cf8;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.16);
+            border-color: #d946ef;
+            box-shadow: 0 0 0 3px rgba(217, 70, 239, 0.18), 0 0 0 6px rgba(34, 211, 238, 0.08);
         }
 
-        /* Botões: micro-interação moderna */
+        /* Botões: micro-interação moderna + gradientes vibrantes */
         main button, main .btn {
+            border-radius: 0.8rem;
             transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease;
         }
         main button:hover:not(:disabled), main .btn:hover { filter: brightness(1.06); }
         main button:active:not(:disabled), main .btn:active { transform: translateY(1px) scale(0.99); }
         main button:disabled, main .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* Pills/badges sutis */
-        main .rounded-full { box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18); }
+        /* Paleta vibrante: roxo/rosa para tons de indigo/blue/violet/purple */
+        main [class*="bg-indigo-600"], main .bg-indigo-600,
+        main [class*="bg-blue-600"], main .bg-blue-600,
+        main [class*="bg-violet-600"], main .bg-violet-600,
+        main [class*="bg-purple-600"], main .bg-purple-600 {
+            background: linear-gradient(135deg, #7c3aed 0%, #c026d3 55%, #ec4899 100%) !important;
+            box-shadow: 0 10px 24px -10px rgba(192, 38, 211, 0.55);
+        }
+        /* Verde/esmeralda → teal vivo */
+        main [class*="bg-green-600"], main .bg-green-600,
+        main [class*="bg-emerald-600"], main .bg-emerald-600,
+        main [class*="bg-teal-600"], main .bg-teal-600 {
+            background: linear-gradient(135deg, #059669 0%, #10b981 55%, #14b8a6 100%) !important;
+            box-shadow: 0 10px 24px -10px rgba(16, 185, 129, 0.55);
+        }
+        /* Vermelho/rosa → coral */
+        main [class*="bg-red-600"], main .bg-red-600,
+        main [class*="bg-rose-600"], main .bg-rose-600 {
+            background: linear-gradient(135deg, #e11d48 0%, #f43f5e 55%, #fb7185 100%) !important;
+            box-shadow: 0 10px 24px -10px rgba(244, 63, 94, 0.55);
+        }
+        /* Amarelo/âmbar → laranja */
+        main [class*="bg-yellow-600"], main .bg-yellow-600,
+        main [class*="bg-amber-600"], main .bg-amber-600,
+        main [class*="bg-orange-600"], main .bg-orange-600 {
+            background: linear-gradient(135deg, #d97706 0%, #f59e0b 55%, #fbbf24 100%) !important;
+            box-shadow: 0 10px 24px -10px rgba(245, 158, 11, 0.55);
+        }
+        /* Ciano/azul claro → azul vivo */
+        main [class*="bg-cyan-600"], main .bg-cyan-600,
+        main [class*="bg-sky-600"], main .bg-sky-600 {
+            background: linear-gradient(135deg, #0891b2 0%, #06b6d4 55%, #22d3ee 100%) !important;
+            box-shadow: 0 10px 24px -10px rgba(6, 182, 212, 0.55);
+        }
+        /* Slate → cinza arroxeado */
+        main [class*="bg-slate-600"], main .bg-slate-600,
+        main [class*="bg-slate-700"], main .bg-slate-700,
+        main [class*="bg-gray-600"], main .bg-gray-600 {
+            background: linear-gradient(135deg, #475569 0%, #64748b 60%, #7c6bb8 100%) !important;
+        }
 
-        /* Tabelas: linha com hover sutil */
+        /* Pills/badges sutis com borda rosa */
+        main .rounded-full { box-shadow: inset 0 0 0 1px rgba(217, 70, 239, 0.20); }
+
+        /* Tabelas: linha com hover colorido sutil */
         main table tbody tr { transition: background-color 0.12s ease; }
-        main table tbody tr:hover { background-color: rgba(99, 102, 241, 0.045); }
-        body.dark main table tbody tr:hover { background-color: rgba(99, 102, 241, 0.12); }
+        main table tbody tr:hover { background-color: rgba(217, 70, 239, 0.06); }
+        body.dark main table tbody tr:hover { background-color: rgba(217, 70, 239, 0.14); }
 
         /* Navbar glass com gradiente */
         body.dark .bg-amber-50 { background: #fef3c7 !important; }
         .nav-glass {
-            background: linear-gradient(92deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%);
-            box-shadow: 0 1px 0 rgba(255,255,255,0.08) inset, 0 10px 30px -12px rgba(30,27,75,0.55);
-            backdrop-filter: blur(10px);
+            background: linear-gradient(120deg, #7c3aed 0%, #db2777 45%, #0891b2 100%);
+            background-size: 220% 220%;
+            animation: aurora 14s ease infinite;
+            box-shadow: 0 1px 0 rgba(255,255,255,0.15) inset, 0 12px 32px -12px rgba(168,85,247,0.55);
+            -webkit-backdrop-filter: blur(16px) saturate(160%);
+            backdrop-filter: blur(16px) saturate(160%);
+        }
+        @keyframes aurora {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
         }
         .nav-glass a { transition: color 0.15s ease; }
         .nav-link { border-radius: 0.5rem; transition: background 0.15s ease, transform 0.12s ease; }
-        .nav-link:hover { background: rgba(255,255,255,0.12); }
+        .nav-link:hover { background: rgba(255,255,255,0.14); }
 
         .logo-mark {
             width: 2rem; height: 2rem; border-radius: 0.7rem;
-            background: linear-gradient(135deg,#818cf8,#22d3ee);
+            background: linear-gradient(135deg, #f472b6, #22d3ee);
             display: inline-flex; align-items: center; justify-content: center;
-            color:#fff; box-shadow: 0 4px 12px -2px rgba(129,140,248,0.6);
+            color:#fff; box-shadow: 0 4px 14px -2px rgba(244, 114, 182, 0.6);
         }
 
         /* Toast moderno */
-        #toast-container .bg-blue-600 { background: linear-gradient(135deg,#4f46e5,#7c3aed) !important; border-radius: 0.75rem; box-shadow: 0 10px 24px -8px rgba(79,70,229,0.55); }
-        #toast-container .bg-green-600 { background: linear-gradient(135deg,#059669,#10b981) !important; border-radius: 0.75rem; box-shadow: 0 10px 24px -8px rgba(5,150,105,0.5); }
-        #toast-container .bg-red-600 { background: linear-gradient(135deg,#dc2626,#f43f5e) !important; border-radius: 0.75rem; box-shadow: 0 10px 24px -8px rgba(220,38,38,0.5); }
-        #toast-container .bg-yellow-600 { background: linear-gradient(135deg,#d97706,#f59e0b) !important; border-radius: 0.75rem; box-shadow: 0 10px 24px -8px rgba(217,119,6,0.5); }
+        #toast-container .bg-blue-600 { background: linear-gradient(135deg, #7c3aed, #ec4899) !important; border-radius: 0.9rem; box-shadow: 0 12px 28px -10px rgba(168,85,247,0.6), inset 0 1px 0 rgba(255,255,255,0.2); }
+        #toast-container .bg-green-600 { background: linear-gradient(135deg,#059669,#10b981) !important; border-radius: 0.9rem; box-shadow: 0 12px 28px -10px rgba(5,150,105,0.55), inset 0 1px 0 rgba(255,255,255,0.2); }
+        #toast-container .bg-red-600 { background: linear-gradient(135deg,#e11d48,#fb7185) !important; border-radius: 0.9rem; box-shadow: 0 12px 28px -10px rgba(220,38,38,0.55), inset 0 1px 0 rgba(255,255,255,0.2); }
+        #toast-container .bg-yellow-600 { background: linear-gradient(135deg,#d97706,#f59e0b) !important; border-radius: 0.9rem; box-shadow: 0 12px 28px -10px rgba(217,119,6,0.55), inset 0 1px 0 rgba(255,255,255,0.2); }
 
         /* Cabeçalhos de página */
         main h2 { letter-spacing: -0.01em; }
