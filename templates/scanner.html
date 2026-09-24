@@ -37,17 +37,23 @@
                 <i class="fas fa-circle text-[8px] align-middle animate-pulse"></i> Ao vivo
             </span>
         </div>
-        <div class="flex gap-2">
+        <form id="form_leitura" class="flex gap-2" autocomplete="off" onsubmit="return false">
             <input type="text" id="ean_input" autofocus
                    class="ean-input flex-1 border-2 border-indigo-200 bg-white rounded-xl px-4 py-3 shadow-sm focus:border-indigo-400 focus:outline-none"
-                   placeholder="Leia o código de barras / QR...">
+                   placeholder="Digite ou leia o código de barras / QR...">
+            <button type="submit"
+                    class="shrink-0 bg-indigo-600 text-white px-4 py-3 rounded-xl hover:bg-indigo-700 font-semibold shadow-lg shadow-indigo-500/30"
+                    title="Confirmar — conta como se tivesse bipado">
+                <i class="fas fa-check"></i>
+                <span class="hidden sm:inline ml-1">Confirmar</span>
+            </button>
             <button type="button" onclick="toggleCamera()"
                     class="shrink-0 bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-4 py-3 rounded-xl hover:brightness-110 font-semibold shadow-lg shadow-blue-500/30"
                     title="Abrir câmera em bip contínuo">
                 <i class="fas fa-barcode"></i>
                 <span class="hidden sm:inline ml-1">Bipar</span>
             </button>
-        </div>
+        </form>
         <p class="text-xs text-gray-500 mt-2 sm:hidden">Toque em <b>Bipar</b>: câmera fica aberta e conta cada código na hora (sem tirar foto). Use o site em HTTPS.</p>
     </div>
 
@@ -165,17 +171,17 @@
         mostrarToast('Loja selecionada: ' + lojaAtual, 'sucesso');
     }
 
-    document.getElementById('ean_input').addEventListener('keydown', async function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            const ean = this.value.trim();
-            this.value = '';
-            if (!ean) {
-                document.getElementById('ean_input').focus();
-                return;
-            }
-            await processarLeitura(ean);
+    document.getElementById('form_leitura').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const input = document.getElementById('ean_input');
+        const ean = input.value.trim();
+        input.value = '';
+        if (!ean) {
+            input.focus();
+            return;
         }
+        await processarLeitura(ean);
+        input.focus();
     });
 
     async function garantirSessao() {
