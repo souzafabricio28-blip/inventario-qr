@@ -234,3 +234,94 @@ def chaves_oficiais():
         if item.get("codigo"):
             omies.add(item["codigo"])
     return eans, omies
+
+
+def adicionar_na_planilha(ean, produto="", marca="", codigo_omie=None, origem="manual"):
+    """Adiciona (ou garante) um produto na planilha oficial — aba 'Lista Unica'.
+
+    Grava em todas as cópias existentes (data/ e Documents) quando possível;
+    considera sucesso se ao menos uma cópia foi atualizada.
+    Retorna (ok, msg).
+    """
+    ean = _norm(ean)
+    if not ean:
+        return False, "EAN/código vazio"
+
+    # Não duplica produto que já consta na planilha
+    carregar_lista_rt(force=True)
+    if resolver_na_planilha(ean):
+        return True, "Produto já consta na planilha oficial"
+
+    codigo_omie = _norm(codigo_omie) if codigo_omie else None
+    codigo_omie = codigo_omie or ean
+    tem_ean = "SIM" if ean.isdigit() else "NAO"
+    ean_origem = "codigo_barras" if tem_ean == "SIM" else "codigo_produto"
+    motivo = (None if tem_ean == "SIM"
+              else "EAN preenchido com o codigo da coluna A (sem codigo de barras)")
+
+    desc_parts = []
+    if marca and str(marca).strip():
+        desc_parts.append(str(marca).strip().upper())
+    if produto and str(produto).strip():
+        desc_parts.append(str(produto).strip().upper())
+    descricao = " ".join(desc_parts) or ean
+
+    def valor(v):
+        s = str(v)
+        return int(s) if s.isdigit() else s
+
+    linha = [
+        valor(ean),       # codigo
+        descricao,        # descricao
+        valor(codigo_omie),  # codigo_omie
+        valor(ean),       # ean
+        tem_ean,          # tem_ean
+        ean_origem,       # ean_origem
+        "SIM",            # encontrado
+        "codigo",         # cruzado_por
+        None,             # fonte_ean
+        motivo,           # motivo_sem_ean
+        origem,           # origem
+    ]
+
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    p_data = os.path.join(raiz, "data", "lista_produtos_RToficial.xlsx")
+    destinos = []
+    for p in (p_data, caminho_lista_rt()):
+        if p and os.path.exists(p) and p not in destinos:
+            destinos.append(p)
+
+    escritos, erros = [], []
+    for dest in destinos:
+        try:
+            wb = load_workbook(dest)
+            ws = wb["Lista Unica"] if "Lista Unica" in wb.sheetnames else wb.active
+            # verificação defensiva de duplicidade por ean no arquivo real
+            i_ean = None
+            for i, c in enumerate(ws[1], start=0):
+                if str(c.value or "").strip().lower() == "ean":
+                    i_ean = i
+                    break
+            dup = False
+            if i_ean is not None:
+                for r in ws.iter_rows(min_row=2, values_only=True):
+                    if i_ean < len(r) and _norm(r[i_ean]) == ean:
+                        dup = True
+                        break
+            if not dup:
+                ws.append(linha)
+                wb.save(dest)
+            escritos.append(dest)
+        except PermissionError:
+            erros.append(f"{os.path.basename(dest)} (sem permissão)")
+        except Exception as e:
+            erros.append(f"{os.path.basename(dest)} ({e})")
+
+    carregar_lista_rt(force=True)
+    if escritos:
+        msg = "adicionado à planilha oficial (" + ", ".join(
+            os.path.basename(p) for p in escritos) + ")"
+        if erros:
+            msg += "; falha em " + "; ".join(erros)
+        return True, msg
+    return False, "não foi possível gravar na planilha oficial: " + "; ".join(erros)

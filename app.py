@@ -192,6 +192,20 @@ def api_criar_produto():
         data_vencimento=data.get("data_vencimento", ""),
         codigo_interno=data.get("codigo_interno", ""),
     )
+    if sucesso:
+        # Produtos cadastrados manualmente entram automaticamente na planilha oficial
+        try:
+            from database.rt_lista import adicionar_na_planilha
+            ok_pl, msg_pl = adicionar_na_planilha(
+                ean=ean,
+                produto=data.get("produto", ""),
+                marca=data.get("marca", ""),
+                codigo_omie=data.get("codigo_interno") or None,
+            )
+            if ok_pl:
+                msg = f"{msg}. Produto {msg_pl}"
+        except Exception as e:
+            msg = f"{msg} (planilha oficial: {e})"
     return jsonify({"sucesso": sucesso, "msg": msg})
 
 

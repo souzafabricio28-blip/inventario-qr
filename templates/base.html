@@ -19,7 +19,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; transition: background 0.3s, color 0.3s;
+body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; transition: background 0.3s, color 0.3s;
             background:
                 radial-gradient(1200px 500px at 85% -10%, rgba(99,102,241,0.10), transparent 60%),
                 radial-gradient(900px 420px at -10% 0%, rgba(16,185,129,0.07), transparent 55%),
@@ -29,40 +29,45 @@
             radial-gradient(900px 420px at -10% 0%, rgba(16,185,129,0.08), transparent 55%),
             #0f172a; color: #f3f4f6; }
         body.dark .bg-white { background: #1e293b; }
-        body.dark .text-gray-600 { color: #d1d5db; }
-        body.dark .text-gray-500 { color: #d1d5db; }
-        body.dark .text-gray-400 { color: #9ca3af; }
+        body.dark .text-gray-600 { color: #93c5fd !important; } /* AZUL CLARO (era d1d5db quase-branco) */
+        body.dark .text-gray-500 { color: #93c5fd !important; } /* AZUL CLARO (era d1d5db quase-branco) */
+        body.dark .text-gray-400 { color: #7dd3fc !important; }
+        body.dark .text-gray-700 { color: #a5b4fc !important; }
+        body.dark .text-gray-800 { color: #a5b4fc !important; }
+        body.dark .text-gray-900 { color: #a5b4fc !important; }
         body.dark .bg-gray-50 { background: #334155; }
         body.dark .border { border-color: #475569; }
         body.dark td, body.dark th { color: #f3f4f6; }
         body.dark .text-indigo-700 { color: #a5b4fc !important; }
-        body.dark .text-indigo-800 { color: #c7d2fe !important; }
+        body.dark .text-indigo-800 { color: #93c5fd !important; } /* azul claro legivel (era quase-branco c7d2fe) */
+        body.dark .bg-indigo-100 { background: #4338ca !important; } /* fundo escuro p/ pills com texto azul claro */
         body.dark .text-green-600, body.dark .text-green-700 { color: #86efac !important; }
         body.dark .text-red-600 { color: #fca5a5 !important; }
         body.dark .text-amber-700 { color: #fcd34d !important; }
-        /* Fundos claros (amber/green/red-50) ficam ilegíveis com texto claro — forçar contraste */
-        body.dark .bg-amber-50,
-        body.dark .bg-amber-100,
-        body.dark .bg-green-50,
-        body.dark .bg-red-50,
-        body.dark .bg-yellow-50,
-        body.dark .bg-indigo-50 {
-            color: #111827 !important;
-        }
-        body.dark .bg-amber-50 td,
-        body.dark .bg-amber-50 th,
-        body.dark .bg-amber-50 .text-gray-600,
-        body.dark .bg-amber-50 .text-indigo-700,
-        body.dark .bg-green-50 td,
-        body.dark .bg-yellow-50 td,
-        body.dark .bg-indigo-50 td {
-            color: #111827 !important;
-        }
-        body.dark .bg-amber-50 { background: #fef3c7 !important; }
-        body.dark .hover\:bg-gray-50:hover { background: #475569 !important; }
-        body.dark input, body.dark select, body.dark textarea { background: #1e293b; color: #f3f4f6; border-color: #475569; }
-        body.dark input::placeholder { color: #9ca3af; }
-        body.dark .sortable:hover { background-color: #475569; }
+body.dark .sortable:hover { background-color: #475569; }
+        /* ===== Fundos claros (-50/-100) viram ESCUROS; texto fica AZUL CLARO legível ===== */
+        body.dark .bg-gray-100 { background: #374151; }
+        body.dark .bg-green-50, body.dark .bg-green-100 { background: #14532d !important; }
+        body.dark .bg-emerald-50, body.dark .bg-emerald-100 { background: #065f46 !important; }
+        body.dark .bg-amber-50, body.dark .bg-amber-100 { background: #78350f !important; }
+        body.dark .bg-red-50, body.dark .bg-red-100 { background: #7f1d1d !important; }
+        body.dark .bg-yellow-50, body.dark .bg-yellow-100 { background: #713f12 !important; }
+        body.dark .bg-indigo-50 { background: #4338ca !important; }
+        body.dark .bg-blue-50, body.dark .bg-blue-100 { background: #1e3a8a !important; }
+        /* Pills/badges: textos -800 também em tom claro para não sumirem no fundo escuro */
+        body.dark .text-green-800, body.dark .text-emerald-800 { color: #86efac !important; }
+        body.dark .text-blue-800 { color: #93c5fd !important; }
+        body.dark .text-amber-800 { color: #fcd34d !important; }
+        body.dark .text-red-800 { color: #fca5a5 !important; }
+        body.dark .text-yellow-700, body.dark .text-yellow-800 { color: #fde68a !important; }
+        /* Inputs */
+        body.dark input, body.dark select, body.dark textarea { background: #374151; color: #f0f9ff; border-color: #6b7280; }
+        body.dark input::placeholder { color: #93c5fd; }
+        body.dark .hover\:bg-gray-50:hover { background: #4b5563 !important; }
+        body.dark .hover\:bg-amber-50:hover { background: #78350f !important; }
+        body.dark .hover\:bg-green-50:hover { background: #14532d !important; }
+        body.dark .hover\:bg-red-50:hover { background: #7f1d1d !important; }
+        body.dark .hover\:bg-blue-50:hover { background: #1e3a8a !important; }
 
         .ean-input { font-family: 'Courier New', monospace; font-size: 1.125rem; letter-spacing: 2px; }
         @media (max-width: 640px) { .ean-input { font-size: 1rem; padding-top: 2px; padding-bottom: 2px; } }
