@@ -270,19 +270,19 @@ def adicionar_na_planilha(ean, produto="", marca="", codigo_omie=None, origem="m
         s = str(v)
         return int(s) if s.isdigit() else s
 
-    linha = [
-        valor(ean),       # codigo
-        descricao,        # descricao
-        valor(codigo_omie),  # codigo_omie
-        valor(ean),       # ean
-        tem_ean,          # tem_ean
-        ean_origem,       # ean_origem
-        "SIM",            # encontrado
-        "codigo",         # cruzado_por
-        None,             # fonte_ean
-        motivo,           # motivo_sem_ean
-        origem,           # origem
-    ]
+    valores_col = {
+        "codigo": valor(ean),
+        "descricao": descricao,
+        "codigo_omie": valor(codigo_omie),
+        "ean": valor(ean),
+        "tem_ean": tem_ean,
+        "ean_origem": ean_origem,
+        "encontrado": "SIM",
+        "cruzado_por": "codigo",
+        "fonte_ean": None,
+        "motivo_sem_ean": motivo,
+        "origem": origem,
+    }
 
     raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     p_data = os.path.join(raiz, "data", "lista_produtos_RToficial.xlsx")
@@ -296,12 +296,14 @@ def adicionar_na_planilha(ean, produto="", marca="", codigo_omie=None, origem="m
         try:
             wb = load_workbook(dest)
             ws = wb["Lista Unica"] if "Lista Unica" in wb.sheetnames else wb.active
+            # mapeia colunas pelo CABEÇALHO real (robusto a reordenação)
+            indices = {}
+            for j, c in enumerate(ws[1], start=0):
+                nome = str(c.value or "").strip().lower()
+                if nome in valores_col:
+                    indices[nome] = j
+            i_ean = indices.get("ean")
             # verificação defensiva de duplicidade por ean no arquivo real
-            i_ean = None
-            for i, c in enumerate(ws[1], start=0):
-                if str(c.value or "").strip().lower() == "ean":
-                    i_ean = i
-                    break
             dup = False
             if i_ean is not None:
                 for r in ws.iter_rows(min_row=2, values_only=True):
@@ -309,7 +311,18 @@ def adicionar_na_planilha(ean, produto="", marca="", codigo_omie=None, origem="m
                         dup = True
                         break
             if not dup:
-                ws.append(linha)
+                ncols = max(indices.values()) + 1 if indices else len(valores_col)
+                # fallback posicional apenas se nenhuma coluna for encontrada (formato antigo)
+                if indices:
+                    row = [None] * ncols
+                    for nome, j in indices.items():
+                        row[j] = valores_col.get(nome)
+                else:
+                    row = [valores_col.get(k) for k in (
+                        "codigo", "descricao", "codigo_omie", "ean", "tem_ean",
+                        "ean_origem", "encontrado", "cruzado_por", "fonte_ean",
+                        "motivo_sem_ean", "origem")]
+                ws.append(row)
                 wb.save(dest)
             escritos.append(dest)
         except PermissionError:

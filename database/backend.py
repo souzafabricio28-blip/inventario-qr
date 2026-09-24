@@ -145,6 +145,30 @@ def listar_produtos(search=""):
                                 continue
                             p[k] = v
                         p["fonte"] = "correcao_manual"
+            # Produtos adicionados pelo app (mesmo quando a planilha não pôde ser gravada)
+            # fazem parte da lista oficial e continuam resolvíveis no próximo bip.
+            try:
+                db_prods = _listar_produtos_db("")
+                eans_lista = {str(x.get("ean")) for x in lista}
+                q = (search or "").strip().upper()
+                for ep in db_prods:
+                    if not ep.get("editado_manual"):
+                        continue
+                    if str(ep.get("ean") or "") in eans_lista:
+                        continue
+                    if q:
+                        blob = " ".join([str(ep.get("ean") or ""),
+                                         str(ep.get("codigo_interno") or ""),
+                                         str(ep.get("produto") or ""),
+                                         str(ep.get("marca") or "")]).upper()
+                        if q not in blob:
+                            continue
+                    ep2 = dict(ep)
+                    ep2["fonte"] = "banco_cadastro"
+                    lista.append(ep2)
+                    eans_lista.add(str(ep.get("ean")))
+            except Exception:
+                pass
         except Exception:
             pass
         return lista
