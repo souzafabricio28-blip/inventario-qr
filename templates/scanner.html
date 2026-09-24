@@ -56,7 +56,10 @@
     <div class="border rounded-lg overflow-hidden">
         <div class="bg-gray-50 px-4 py-2 font-bold text-sm text-gray-600 flex justify-between">
             <span>ITENS DA SESSÃO (quantidade acumulada)</span>
-            <button onclick="carregarResumoSessao()" class="text-indigo-600 text-xs font-normal hover:underline">Atualizar</button>
+            <div class="flex items-center gap-3">
+                <button onclick="carregarResumoSessao()" class="text-indigo-600 text-xs font-normal hover:underline">Atualizar</button>
+                <button onclick="limparSessao()" class="text-red-600 text-xs font-normal hover:underline"><i class="fas fa-trash"></i> Limpar tudo</button>
+            </div>
         </div>
         <div id="resumo_sessao" class="divide-y max-h-80 overflow-y-auto"></div>
     </div>
@@ -467,6 +470,28 @@
         if (!data.sucesso) return mostrarToast(data.msg || 'Falha ao editar', 'erro');
         mostrarToast(`Quantidade: ${qtd}`, 'sucesso');
         await carregarResumoSessao();
+        document.getElementById('ean_input').focus();
+    }
+
+    async function limparSessao() {
+        if (!sessaoAtual) return mostrarToast('Nenhuma sessão ativa', 'erro');
+        if (!confirm('Limpar TODOS os itens desta sessão?\n\n' +
+            'A sessão continua ativa — os próximos bipes voltam a contar do zero.\n' +
+            'Esta ação não pode ser desfeita.')) return;
+        const r = await fetch('/api/contagem/zerar', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ sessao: sessaoAtual }),
+        });
+        const data = await r.json();
+        if (!data.sucesso) return mostrarToast(data.msg || 'Falha ao limpar', 'erro');
+        Object.keys(qtyPorEan).forEach(k => delete qtyPorEan[k]);
+        totalLeituras = 0;
+        atualizarContador();
+        document.getElementById('itens_unicos').textContent = '0 itens';
+        document.getElementById('resumo_sessao').innerHTML =
+            '<div class="px-4 py-6 text-center text-gray-400 text-sm">Sessão limpa — bipar de novo para reiniciar</div>';
+        mostrarToast('Sessão limpa', 'sucesso');
         document.getElementById('ean_input').focus();
     }
 
