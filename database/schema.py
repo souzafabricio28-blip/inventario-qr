@@ -105,6 +105,16 @@ def criar_tabelas():
             status TEXT DEFAULT 'aberta'
         );
 
+        CREATE TABLE IF NOT EXISTS estoque_produto (
+            ean TEXT NOT NULL,
+            loja TEXT NOT NULL DEFAULT 'RTJ',
+            quantidade_estoque REAL NOT NULL DEFAULT 0,
+            lote TEXT DEFAULT '',
+            data_vencimento TEXT DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (ean, loja)
+        );
+
         CREATE TABLE IF NOT EXISTS validacoes_base (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ean TEXT NOT NULL,
@@ -175,5 +185,19 @@ def migrar_banco(conn):
                 observacao TEXT DEFAULT '',
                 data_saida TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""")
+        existing_sai = [row[1] for row in cursor.execute("PRAGMA table_info(saidas_estoque)").fetchall()]
+    if existing_sai and "loja" not in existing_sai:
+        cursor.execute("ALTER TABLE saidas_estoque ADD COLUMN loja TEXT DEFAULT ''")
+
+    cursor.execute("CREATE TABLE IF NOT EXISTS estoque_produto ("
+                   "ean TEXT NOT NULL, loja TEXT NOT NULL DEFAULT 'RTJ',"
+                   "quantidade_estoque REAL NOT NULL DEFAULT 0, lote TEXT DEFAULT '',"
+                   "data_vencimento TEXT DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+                   "PRIMARY KEY (ean, loja))")
+    qtd = cursor.execute("SELECT COUNT(*) FROM estoque_produto").fetchone()[0]
+    if qtd == 0:
+        cursor.execute("""INSERT OR IGNORE INTO estoque_produto (ean, loja, quantidade_estoque, lote, data_vencimento)
+                          SELECT ean, 'RTJ', quantidade_estoque, lote, data_vencimento FROM produtos
+                          WHERE COALESCE(quantidade_estoque, 0) > 0""")
 
 

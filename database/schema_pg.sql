@@ -97,7 +97,18 @@ CREATE TABLE IF NOT EXISTS saidas_estoque (
     data_vencimento TEXT DEFAULT '',
     motivo TEXT DEFAULT '',
     observacao TEXT DEFAULT '',
+    loja TEXT DEFAULT '',
     data_saida TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS estoque_produto (
+    ean TEXT NOT NULL,
+    loja TEXT NOT NULL DEFAULT 'RTJ',
+    quantidade_estoque DOUBLE PRECISION NOT NULL DEFAULT 0,
+    lote TEXT DEFAULT '',
+    data_vencimento TEXT DEFAULT '',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (ean, loja)
 );
 
 CREATE TABLE IF NOT EXISTS config (
@@ -123,5 +134,17 @@ CREATE INDEX IF NOT EXISTS idx_usuarios_usuario ON usuarios(usuario);
 -- Migração para bancos existentes
 ALTER TABLE inventario_contagem ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT 'RTJ';
 ALTER TABLE sessoes_inventario ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT 'RTJ';
+ALTER TABLE saidas_estoque ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_inventario_loja ON inventario_contagem(loja);
 CREATE INDEX IF NOT EXISTS idx_sessoes_loja ON sessoes_inventario(loja);
+CREATE INDEX IF NOT EXISTS idx_estoque_produto_loja ON estoque_produto(loja);
+
+-- Semeia o estoque_produto a partir do estoque geral que já existia
+DO $$
+BEGIN
+    IF (SELECT COUNT(*) FROM estoque_produto) = 0 THEN
+        INSERT INTO estoque_produto (ean, loja, quantidade_estoque, lote, data_vencimento)
+        SELECT ean, 'RTJ', quantidade_estoque, lote, data_vencimento
+        FROM produtos WHERE COALESCE(quantidade_estoque, 0) > 0;
+    END IF;
+END $$;

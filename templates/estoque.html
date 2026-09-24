@@ -6,6 +6,9 @@
         <h2 class="text-xl font-bold mb-3"><i class="fas fa-warehouse text-indigo-600"></i> Estoque Atual</h2>
 
         <div class="flex flex-wrap gap-2 mb-4">
+            <select id="select_loja" class="border rounded-lg px-3 py-2 text-sm font-semibold" onchange="trocarLoja(this.value)">
+                <option value="">Carregando lojas…</option>
+            </select>
             <input type="text" id="busca-estoque" placeholder="Buscar por EAN ou produto..."
                    class="flex-1 min-w-[12rem] border rounded-lg px-4 py-2">
             <button onclick="buscarEstoque()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg"><i class="fas fa-search"></i></button>
@@ -16,6 +19,8 @@
                 <i class="fas fa-eraser"></i> Zerar estoque
             </button>
         </div>
+
+        <div id="loja-frase" class="text-sm text-gray-500 mb-3"></div>
 
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -49,9 +54,44 @@
 </div>
 
 <script>
+    let lojaEstoque = localStorage.getItem('loja_atual') || 'RTJ';
+
+    async function carregarLojas() {
+        const sel = document.getElementById('select_loja');
+        try {
+            const r = await fetch('/api/lojas', { cache: 'no-store' });
+            const lojas = await r.json();
+            if (!Array.isArray(lojas) || !lojas.length) return;
+            sel.innerHTML = lojas.map(l =>
+                `<option value="${l.codigo}">${l.codigo} — ${l.nome}</option>`
+            ).join('');
+            if (lojas.some(l => l.codigo === lojaEstoque)) sel.value = lojaEstoque;
+            else lojaEstoque = sel.value;
+        } catch (e) {
+            sel.innerHTML = '<option value="RTJ">RTJ</option><option value="RTB">RTB</option>';
+        }
+        atualizarFraseLoja();
+    }
+
+    function trocarLoja(codigo) {
+        lojaEstoque = codigo || 'RTJ';
+        localStorage.setItem('loja_atual', lojaEstoque);
+        atualizarFraseLoja();
+        document.getElementById('zerados-section').classList.add('hidden');
+        buscarEstoque();
+    }
+
+    function atualizarFraseLoja() {
+        document.getElementById('loja-frase').textContent =
+            'Estoque exibido da loja: ' + lojaEstoque + ' (RTJ = Rio Tinto, RTB = Rio do Bastos)';
+    }
+
     async function buscarEstoque() {
         const q = document.getElementById('busca-estoque').value.trim();
-        const url = q ? '/api/estoque?search=' + encodeURIComponent(q) : '/api/estoque';
+        const loja = encodeURIComponent(lojaEstoque);
+        const url = q
+            ? `/api/estoque?search=${encodeURIComponent(q)}&loja=${loja}`
+            : `/api/estoque?loja=${loja}`;
         const r = await fetch(url);
         const dados = await r.json();
         const tbody = document.getElementById('estoque-body');
@@ -79,7 +119,7 @@
         document.getElementById('resumo-estoque').innerHTML = `
             <div class="bg-indigo-50 rounded-lg p-3">
                 <p class="text-2xl font-bold text-indigo-600">${total}</p>
-                <p class="text-xs text-gray-500">Total unidades</p>
+                <p class="text-xs text-gray-500">Total unidades (${lojaEstoque})</p>
             </div>
             <div class="bg-green-50 rounded-lg p-3">
                 <p class="text-2xl font-bold text-green-600">${comEstoque}</p>
@@ -99,7 +139,7 @@
             return;
         }
         section.classList.remove('hidden');
-        const r = await fetch('/api/estoque/zerados');
+        const r = await fetch(`/api/estoque/zerados?loja=${encodeURIComponent(lojaEstoque)}`);
         const dados = await r.json();
         document.getElementById('zerados-body').innerHTML = dados.length === 0
             ? '<p class="text-gray-400 text-center">Nenhum produto zerado</p>'
@@ -114,8 +154,9 @@
 
     async function zerarEstoque() {
         if (!confirm(
-            'ZERAR o estoque de TODOS os produtos?\n\n' +
-            'Todas as quantidades passam a 0.\n' +
+            'ZERAR o estoque da loja ' + lojaEstoque + '?\n\n' +
+            'Todas as quantidades desta loja passam a 0.\n' +
+            'O estoque das OUTRAS lojas não é alterado.\n' +
             'Contagens de inventário NÃO são apagadas.'
         )) return;
         const limparLote = confirm(
@@ -126,7 +167,7 @@
             const r = await fetch('/api/estoque/zerar', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ limpar_lote: limparLote }),
+                body: JSON.stringify({ limpar_lote: limparLote, loja: lojaEstoque }),
             });
             const data = await r.json();
             alert(data.msg || (data.sucesso ? 'OK' : 'Erro'));
@@ -143,6 +184,7 @@
         if (e.key === 'Enter') buscarEstoque();
     });
 
+    carregarLojas();
     buscarEstoque();
 </script>
 {% endblock %}

@@ -5,6 +5,13 @@
     <div class="bg-white rounded-xl shadow-md p-6 mb-4">
         <h2 class="text-xl font-bold mb-3"><i class="fas fa-arrow-right text-red-600"></i> Saída de Estoque</h2>
 
+        <div class="mb-3">
+            <label class="text-xs font-semibold text-gray-500">Loja</label>
+            <select id="select_loja" class="w-full sm:w-56 border rounded-lg px-3 py-2 text-sm font-semibold" onchange="trocarLoja(this.value)">
+                <option value="">Carregando lojas…</option>
+            </select>
+        </div>
+
         <div class="bg-gray-100 rounded-lg p-3 mb-3">
             <div class="flex items-center space-x-2 mb-2">
                 <input type="text" id="ean_input" autofocus
@@ -87,6 +94,29 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
     let ultimoEan = '';
+    let lojaSaida = localStorage.getItem('loja_atual') || 'RTJ';
+
+    async function carregarLojas() {
+        const sel = document.getElementById('select_loja');
+        try {
+            const r = await fetch('/api/lojas', { cache: 'no-store' });
+            const lojas = await r.json();
+            if (!Array.isArray(lojas) || !lojas.length) return;
+            sel.innerHTML = lojas.map(l =>
+                `<option value="${l.codigo}">${l.codigo} — ${l.nome}</option>`
+            ).join('');
+            if (lojas.some(l => l.codigo === lojaSaida)) sel.value = lojaSaida;
+            else lojaSaida = sel.value;
+        } catch (e) {
+            sel.innerHTML = '<option value="RTJ">RTJ</option><option value="RTB">RTB</option>';
+        }
+    }
+
+    function trocarLoja(codigo) {
+        lojaSaida = codigo || 'RTJ';
+        localStorage.setItem('loja_atual', lojaSaida);
+    }
+    window.trocarLoja = trocarLoja;
 
     document.getElementById('ean_input').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
@@ -134,7 +164,7 @@
         const r = await fetch('/api/saidas', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ean, produto, quantidade, lote, data_vencimento: venc, motivo, observacao: obs}),
+            body: JSON.stringify({ean, produto, quantidade, lote, data_vencimento: venc, motivo, observacao: obs, loja: lojaSaida}),
         });
         const data = await r.json();
         if (data.sucesso) {
@@ -147,7 +177,8 @@
             beep('ok');
             document.getElementById('produto-info').classList.add('hidden');
             document.getElementById('obs_saida').value = '';
-            carregarSaidas();
+carregarLojas();
+    carregarSaidas();
         } else {
             mostrarToast(data.msg || 'Erro', 'erro');
         }
@@ -220,6 +251,7 @@
                     ${s.lote ? `<span class="text-gray-400 ml-1">Lote: ${s.lote}</span>` : ''}
                 </div>
                 <div class="flex items-center space-x-2 ml-2">
+                    ${s.loja ? `<span class="px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-bold">${s.loja}</span>` : ''}
                     <span class="font-bold text-red-600">${s.quantidade}x</span>
                     <span class="text-gray-500">${s.motivo || ''}</span>
                     <span class="text-gray-400">${s.data_saida ? formatarData(s.data_saida.split(' ')[0]) : ''}</span>

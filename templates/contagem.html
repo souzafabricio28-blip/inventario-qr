@@ -321,11 +321,13 @@
             alert('Selecione uma sessão de inventário antes de aplicar.');
             return;
         }
+        const loja = lojaSelecionada();
+        const nomeLoja = loja || 'da sessão';
         if (!confirm(
-            'Aplicar a contagem da sessão "' + sessao + '" como ESTOQUE GERAL?\n\n' +
-            '• Produtos contados: quantidade vira o estoque oficial\n' +
+            'Aplicar a contagem da sessão "' + sessao + '" como ESTOQUE DA LOJA ' + (loja || 'da sessão') + '?\n\n' +
+            '• Produtos contados: quantidade vira o estoque oficial da loja\n' +
             '• Entradas (NF-e) depois: SOMAM nesse estoque\n' +
-            '• Saídas: DIMINUEM o estoque'
+            '• Saídas: DIMINUEM o estoque da loja'
         )) return;
 
         const zerarNao = confirm(
@@ -336,7 +338,7 @@
             const r = await fetch('/api/contagem/aplicar-estoque', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ sessao, zerar_nao_contados: zerarNao }),
+                body: JSON.stringify({ sessao, zerar_nao_contados: zerarNao, loja }),
             });
             const data = await r.json();
             alert(data.msg || (data.sucesso ? 'Estoque atualizado' : 'Erro'));

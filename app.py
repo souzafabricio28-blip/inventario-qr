@@ -519,13 +519,14 @@ def api_contagem():
                 "loja": (c or {}).get("loja") or loja,
                 "status": "contado" if qtd > 0 else "pendente",
             })
-        # Estoque real do banco para os que existem
+        # Estoque real por loja para os que existem
         try:
-            from database.backend import _listar_produtos_db, _buscar_produto_db
+            from database.backend import get_estoque
             for row in resultado:
-                dbp = _buscar_produto_db(row["ean"]) or _buscar_produto_db(row["codigo_omie"])
-                if dbp:
-                    row["quantidade_estoque"] = float(dbp.get("quantidade_estoque") or 0)
+                loja_row = row.get("loja") or loja
+                ep = get_estoque(row["ean"], loja_row)
+                if ep:
+                    row["quantidade_estoque"] = float(ep.get("quantidade_estoque") or 0)
         except Exception:
             pass
         return jsonify(resultado)
@@ -596,12 +597,13 @@ def api_excluir_contagem_item():
 @login_required
 @api_handler
 def api_aplicar_contagem_estoque():
-    """Aplica a contagem da sessão como estoque geral da loja."""
+    """Aplica a contagem da sessão como estoque da loja da sessão."""
     data = request.json or {}
     sessao = (data.get("sessao") or session.get("sessao_atual") or "").strip()
     zerar = bool(data.get("zerar_nao_contados"))
-    ok, msg = aplicar_contagem_como_estoque(sessao, zerar_nao_contados=zerar)
-    return jsonify({"sucesso": ok, "msg": msg, "sessao": sessao}), (200 if ok else 400)
+    loja = (data.get("loja") or "").strip() or loja_da_sessao(sessao) or ""
+    ok, msg = aplicar_contagem_como_estoque(sessao, zerar_nao_contados=zerar, loja=loja)
+    return jsonify({"sucesso": ok, "msg": msg, "sessao": sessao, "loja": loja}), (200 if ok else 400)
 
 
 @app.route("/api/contagem/zerar", methods=["POST"])
@@ -1191,29 +1193,31 @@ def pagina_estoque():
 @login_required
 @api_handler
 def api_estoque():
-    return jsonify(listar_estoque(request.args.get("search", "")))
+    return jsonify(listar_estoque(request.args.get("search", ""), request.args.get("loja", "")))
 
 
 @app.route("/api/estoque/zerados")
 @login_required
 @api_handler
 def api_estoque_zerados():
-    return jsonify(listar_estoque_zerados())
+    return jsonify(listar_estoque_zerados(request.args.get("search", ""), request.args.get("loja", "")))
 
 
 @app.route("/api/estoque/zerar", methods=["POST"])
 @login_required
 @api_handler
 def api_zerar_estoque():
-    """Zera o estoque geral de todos os produtos."""
+    """Zera o estoque da loja informada (ou da padrão)."""
     data = request.json or {}
     limpar_lote = bool(data.get("limpar_lote"))
-    ok, afetados = zerar_estoque_geral(limpar_lote=limpar_lote)
+    loja = (data.get("loja") or "").strip() or "RTJ"
+    ok, afetados = zerar_estoque_geral(limpar_lote=limpar_lote, loja=loja)
     extra = " (lote/validade limpos)" if limpar_lote else ""
     return jsonify({
         "sucesso": ok,
         "afetados": afetados,
-        "msg": f"Estoque zerado: {afetados} produto(s) atualizado(s){extra}.",
+        "loja": loja,
+        "msg": f"Estoque da loja {loja} zerado: {afetados} produto(s) atualizado(s){extra}.",
     })
 
 # ── Saída de Estoque ─────────────────────────────────────
@@ -1242,8 +1246,9 @@ def api_registrar_saida():
         data["ean"], data.get("produto", ""), data.get("quantidade", 1),
         data.get("lote", ""), data.get("data_vencimento", ""),
         data.get("motivo", ""), data.get("observacao", ""),
+        loja=data.get("loja") or "",
     )
-    return jsonify({"sucesso": True})
+    return jsonify({"sucesso": True, "loja": data.get("loja") or "RTJ"})
 
 # ── Gerenciamento de Usuários ────────────────────────────────
 
