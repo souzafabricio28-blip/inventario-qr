@@ -59,11 +59,13 @@ def _garantir_produto_planilha(item):
 
     existente = _buscar_produto_db(ean)
     if not existente or (existente.get("ean") or "") != ean:
+        # Auto-cadastro da planilha NÃO é correção manual: produto segue sendo sincronizado
         ok, msg = criar_produto(
             ean=ean,
             produto=p["produto"],
             marca=p["marca"],
             codigo_interno=omie,
+            editado_manual=False,
         )
         if ok or "UNIQUE" in (msg or "").upper():
             if not ok:
