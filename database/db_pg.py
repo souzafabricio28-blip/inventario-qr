@@ -840,6 +840,32 @@ def _normalizar_loja(loja=""):
     return (loja or "").strip() or "RTJ"
 
 
+def get_estoque(ean, loja=""):
+    """Retorna o saldo/lote/validade do produto na loja (ou None)."""
+    loja = _normalizar_loja(loja)
+    with get_db() as conn:
+        row = _exec(conn,
+            "SELECT * FROM estoque_produto WHERE ean=%s AND loja=%s LIMIT 1",
+            (ean, loja)).fetchone()
+        return dict(row) if row else None
+
+
+def set_estoque(ean, quantidade, loja="", lote="", data_vencimento=""):
+    """Define (substitui) o saldo do produto na loja. Upsert em estoque_produto."""
+    loja = _normalizar_loja(loja)
+    with get_db() as conn:
+        _exec(conn,
+            """INSERT INTO estoque_produto (ean, loja, quantidade_estoque, lote, data_vencimento, updated_at)
+               VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+               ON CONFLICT (ean, loja) DO UPDATE SET
+                 quantidade_estoque = EXCLUDED.quantidade_estoque,
+                 lote = CASE WHEN EXCLUDED.lote != '' THEN EXCLUDED.lote ELSE estoque_produto.lote END,
+                 data_vencimento = CASE WHEN EXCLUDED.data_vencimento != '' THEN EXCLUDED.data_vencimento ELSE estoque_produto.data_vencimento END,
+                 updated_at = CURRENT_TIMESTAMP""",
+            (ean, loja, quantidade, lote, data_vencimento))
+        conn.commit()
+
+
 def listar_estoque(search="", loja=""):
     loja = _normalizar_loja(loja)
     with get_db() as conn:

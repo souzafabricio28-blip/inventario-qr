@@ -109,6 +109,16 @@ def criar_tabelas():
         cursor = conn.cursor()
         with open(os.path.join(os.path.dirname(__file__), "schema_pg.sql"), encoding="utf-8") as f:
             cursor.execute(f.read())
+
+        # Semeia estoque_produto a partir do estoque geral que já existia (apenas 1x)
+        cursor.execute("SELECT COUNT(*) FROM estoque_produto")
+        count = cursor.fetchone()
+        qtd = int(count[0]) if count else 0
+        if qtd == 0:
+            cursor.execute(
+                """INSERT INTO estoque_produto (ean, loja, quantidade_estoque, lote, data_vencimento)
+                   SELECT ean, 'RTJ', quantidade_estoque, lote, data_vencimento
+                   FROM produtos WHERE COALESCE(quantidade_estoque, 0) > 0""")
         conn.commit()
     finally:
         devolver_conexao(conn)

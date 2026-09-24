@@ -138,13 +138,3 @@ ALTER TABLE saidas_estoque ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_inventario_loja ON inventario_contagem(loja);
 CREATE INDEX IF NOT EXISTS idx_sessoes_loja ON sessoes_inventario(loja);
 CREATE INDEX IF NOT EXISTS idx_estoque_produto_loja ON estoque_produto(loja);
-
--- Semeia o estoque_produto a partir do estoque geral que já existia
-DO $$
-BEGIN
-    IF (SELECT COUNT(*) FROM estoque_produto) = 0 THEN
-        INSERT INTO estoque_produto (ean, loja, quantidade_estoque, lote, data_vencimento)
-        SELECT ean, 'RTJ', quantidade_estoque, lote, data_vencimento
-        FROM produtos WHERE COALESCE(quantidade_estoque, 0) > 0;
-    END IF;
-END $$;
