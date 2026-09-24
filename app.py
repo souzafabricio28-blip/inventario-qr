@@ -24,7 +24,7 @@ from database.backend import (
     finalizar_recebimento, excluir_recebimento, get_etiquetas_nfe,
     listar_estoque, listar_estoque_zerados, mover_estoque, listar_saidas, registrar_saida,
     zerar_estoque_geral,
-    qtd_contagem_sessao, vincular_codigo,
+    qtd_contagem_sessao, vincular_codigo, buscar_por_vinculo_manual,
     definir_contagem_sessao, excluir_contagem_sessao,
     aplicar_contagem_como_estoque, zerar_contagens,
     sessao_mais_ativa, loja_da_sessao,
@@ -215,7 +215,7 @@ def api_criar_produto():
 def api_atualizar_produto(ean):
     data = request.json or {}
     novo_ean = data.get("ean") or None
-    sucesso, msg = atualizar_produto(ean, ean_novo=novo_ean, **{
+    sucesso, msg = atualizar_produto(ean, ean_novo=novo_ean, editado_manual=True, **{
         k: v for k, v in data.items()
         if k in ("produto", "marca", "unidade_medida",
                  "base_especifica", "instrucao_dosagem", "lote",
@@ -264,8 +264,11 @@ def _garantir_produto_rt(item_rt):
     codigo_interno = omie or ean
     if produto:
         ean_db = produto["ean"]
-        # atualiza nome/omie se mudou
-        if (produto.get("codigo_interno") or "") != codigo_interno or (produto.get("produto") or "") != nome:
+        # atualiza nome/omie se mudou — a menos que o usuário tenha corrigido na mão
+        if not produto.get("editado_manual") and (
+            (produto.get("codigo_interno") or "") != codigo_interno
+            or (produto.get("produto") or "") != nome
+        ):
             atualizar_produto(ean_db, produto=nome, marca=marca, codigo_interno=codigo_interno)
             produto = buscar_produto(ean_db) or produto
     else:
@@ -273,6 +276,7 @@ def _garantir_produto_rt(item_rt):
         ean_novo = ean or omie
         ok, _ = criar_produto(
             ean=ean_novo, produto=nome, marca=marca, codigo_interno=codigo_interno,
+            editado_manual=False,
         )
         if not ok:
             # pode já existir — tenta buscar de novo
@@ -284,11 +288,11 @@ def _garantir_produto_rt(item_rt):
         return None
 
     ean_db = produto["ean"]
-    # Vincula ean e codigo_omie como chaves de bipagem
+    # Vincula ean e codigo_omie como chaves de bipagem (sem apagar correções manuais)
     for alias in (ean, omie, item_rt.get("codigo")):
         if alias and alias != ean_db:
             try:
-                vincular_codigo(alias, ean_db, origem="rt_planilha")
+                vincular_codigo(alias, ean_db, origem="rt_planilha", sobrescrever=False)
             except Exception:
                 pass
     return produto
@@ -308,14 +312,18 @@ def _processar_bip(codigo_bruto, sessao, loja=""):
     parsed = parse_codigo_lido(codigo_bruto)
     codigo = parsed["ean"] or (codigo_bruto or "").strip()
 
-    # 1) Busca precisa na planilha: colunas ean e codigo_omie
-    carregar_lista_rt(force=False)
-    item_rt = resolver_na_planilha(codigo)
-    produto = None
-    if item_rt:
-        produto = _garantir_produto_rt(item_rt)
+    # 0) Correção manual de associação (vincular/edição) tem prioridade sobre a planilha
+    produto = buscar_por_vinculo_manual(codigo)
+    item_rt = None
 
-    # 2) Fallback cadastro já existente no banco
+    # 1) Busca precisa na planilha: colunas ean e codigo_omie
+    if not produto:
+        carregar_lista_rt(force=False)
+        item_rt = resolver_na_planilha(codigo)
+        if item_rt:
+            produto = _garantir_produto_rt(item_rt)
+
+    # 2) Fallback cadastro já existente no banco (produtos corrigidos na mão têm prioridade)
     if not produto:
         produto = buscar_produto(codigo)
     if not produto and parsed.get("codigo_interno"):

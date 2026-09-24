@@ -20,6 +20,7 @@ if PG_ATIVO:
         zerar_estoque_geral,
         fechar_sessao, fechar_sessoes_abertas, sessao_esta_aberta, registrar_validacao, get_ultima_validacao,
         qtd_contagem_sessao, vincular_codigo,
+        buscar_por_vinculo_manual, listar_produtos_editados, listar_aliases,
         definir_contagem_sessao, excluir_contagem_sessao,
         aplicar_contagem_como_estoque, zerar_contagens,
         sessao_mais_ativa, loja_da_sessao,
@@ -42,6 +43,7 @@ else:
         zerar_estoque_geral,
         fechar_sessao, fechar_sessoes_abertas, sessao_esta_aberta, registrar_validacao, get_ultima_validacao,
         qtd_contagem_sessao, vincular_codigo,
+        buscar_por_vinculo_manual, listar_produtos_editados, listar_aliases,
         definir_contagem_sessao, excluir_contagem_sessao,
         aplicar_contagem_como_estoque, zerar_contagens,
         sessao_mais_ativa, loja_da_sessao,
@@ -75,7 +77,8 @@ def _garantir_produto_planilha(item):
                     if existente:
                         break
     else:
-        if (
+        # Correção manual prevalece sobre a planilha: não sobrescreve o que o usuário editou
+        if not (existente.get("editado_manual") if existente else False) and (
             (existente.get("produto") or "") != p["produto"]
             or (existente.get("marca") or "") != p["marca"]
             or (existente.get("codigo_interno") or "") != omie
@@ -95,7 +98,7 @@ def _garantir_produto_planilha(item):
     for alias in (ean, omie, item.get("codigo"), item.get("ean"), item.get("codigo_omie")):
         if alias and alias != ean_db:
             try:
-                vincular_codigo(alias, ean_db, origem="rt_oficial")
+                vincular_codigo(alias, ean_db, origem="rt_oficial", sobrescrever=False)
             except Exception:
                 pass
     out = dict(existente)
@@ -107,12 +110,42 @@ def _garantir_produto_planilha(item):
 
 
 def listar_produtos(search=""):
-    """Catálogo oficial = planilha RT. Fallback para o banco se a planilha falhar."""
+    """Catálogo oficial = planilha RT. Fallback para o banco se a planilha falhar.
+
+    Correções manuais (editado_manual=1) prevalecem sobre a planilha na listagem.
+    """
     from .rt_lista import carregar_lista_rt, listar_como_produtos, status_lista_rt
     ok, _ = carregar_lista_rt(force=False)
     st = status_lista_rt()
     if ok and (st.get("total") or 0) > 0:
-        return listar_como_produtos(search)
+        lista = listar_como_produtos(search)
+        try:
+            editados = listar_produtos_editados("")
+            aliases = listar_aliases()
+            alias_por_produto = {}
+            for a in aliases:
+                alias_por_produto.setdefault(a.get("ean_produto") or "", []).append(
+                    a.get("codigo") or "")
+            mapa = {}
+            for ep in editados:
+                ean_ep = ep.get("ean")
+                if not ean_ep:
+                    continue
+                mapa[ean_ep] = ep
+                for a in alias_por_produto.get(ean_ep, []):
+                    mapa[a] = ep
+            if mapa:
+                for p in lista:
+                    o = mapa.get(p.get("ean")) or mapa.get(p.get("codigo_interno") or "")
+                    if o:
+                        for k, v in o.items():
+                            if k == "id":
+                                continue
+                            p[k] = v
+                        p["fonte"] = "correcao_manual"
+        except Exception:
+            pass
+        return lista
     return _listar_produtos_db(search)
 
 
@@ -132,13 +165,19 @@ def get_dashboard_stats():
     return stats
 
 
-def buscar_produto(ean):
-    """Busca primeiro na planilha RT (ean / codigo_omie); espelha no banco."""
+def buscar_produto(ean, _force_manual_first=True):
+    """Busca primeiro na planilha RT (ean / codigo_omie); espelha no banco.
+
+    Produtos com correção manual (editado_manual=1) têm prioridade sobre a planilha.
+    """
     from .rt_lista import carregar_lista_rt, resolver_na_planilha
+    db_prod = _buscar_produto_db(ean)
+    if db_prod and bool(db_prod.get("editado_manual")):
+        return db_prod
     carregar_lista_rt(force=False)
     item = resolver_na_planilha(ean)
     if item:
         prod = _garantir_produto_planilha(item)
         if prod:
             return prod
-    return _buscar_produto_db(ean)
+    return db_prod

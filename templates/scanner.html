@@ -333,11 +333,9 @@
             eanPendente = data.ean || ean;
             mostrarResultadoErro(eanPendente, data.msg || 'Não cadastrado na lista RT');
             if (typeof beep === 'function') beep('erro');
-            document.getElementById('vincular_painel').classList.remove('hidden');
             document.getElementById('vincular_codigo').textContent = eanPendente;
             document.getElementById('vincular_busca').value = '';
             document.getElementById('vincular_resultados').innerHTML = '';
-            document.getElementById('cadastro_rapido').classList.remove('hidden');
             document.getElementById('rapido_codigo_interno').value = eanPendente;
             document.getElementById('rapido_produto').value = '';
             document.getElementById('rapido_marca').value = '';
@@ -346,6 +344,7 @@
             document.getElementById('rapido_lote').value = '';
             document.getElementById('rapido_vencimento').value = '';
             document.getElementById('rapido_dosagem').value = '';
+            mostrarPainelVincular();
             return;
         }
         atualizarContador();
@@ -392,7 +391,27 @@
             <strong>Código não encontrado na lista RT oficial</strong>
             <p class="font-mono text-lg mt-2 break-all">${ean}</p>
             <p class="text-sm text-gray-600 mt-2">${detalhe || ''}</p>
-            <p class="text-sm text-gray-500 mt-1">Vincule a um produto da lista ou cadastre abaixo.</p>`;
+            <p class="text-sm text-gray-500 mt-1">Altere a associação ou cadastre um produto novo:</p>
+            <div class="flex flex-wrap gap-2 mt-3">
+                <button onclick="mostrarPainelVincular()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-sm">
+                    <i class="fas fa-link"></i> Alterar / Associar a um produto
+                </button>
+                <button onclick="mostrarPainelCadastrar()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">
+                    <i class="fas fa-plus-circle"></i> Cadastrar novo produto
+                </button>
+            </div>`;
+    }
+
+    function mostrarPainelVincular() {
+        document.getElementById('cadastro_rapido').classList.add('hidden');
+        document.getElementById('vincular_painel').classList.remove('hidden');
+        document.getElementById('vincular_painel').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    }
+
+    function mostrarPainelCadastrar() {
+        document.getElementById('vincular_painel').classList.add('hidden');
+        document.getElementById('cadastro_rapido').classList.remove('hidden');
+        document.getElementById('cadastro_rapido').scrollIntoView({behavior: 'smooth', block: 'nearest'});
     }
 
     function htmlItemSessao(ean, produto, omie, qtd) {
@@ -676,6 +695,8 @@
     }
 
     window.processarLeitura = processarLeitura;
+    window.mostrarPainelVincular = mostrarPainelVincular;
+    window.mostrarPainelCadastrar = mostrarPainelCadastrar;
 
     (async function initScanner() {
         await carregarLojas();

@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS produtos (
     data_vencimento TEXT DEFAULT '',
     codigo_interno TEXT DEFAULT '',
     quantidade_estoque DOUBLE PRECISION DEFAULT 0,
+    editado_manual INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -134,6 +135,7 @@ CREATE INDEX IF NOT EXISTS idx_validacoes_ean ON validacoes_base(ean);
 CREATE INDEX IF NOT EXISTS idx_usuarios_usuario ON usuarios(usuario);
 
 -- Migração para bancos existentes
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS editado_manual INTEGER DEFAULT 0;
 ALTER TABLE inventario_contagem ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT 'RTJ';
 ALTER TABLE sessoes_inventario ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT 'RTJ';
 ALTER TABLE saidas_estoque ADD COLUMN IF NOT EXISTS loja TEXT DEFAULT '';

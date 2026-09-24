@@ -73,6 +73,8 @@ def criar_tabelas():
             instrucao_dosagem TEXT DEFAULT '',
             lote TEXT DEFAULT '',
             data_vencimento TEXT DEFAULT '',
+            codigo_interno TEXT DEFAULT '',
+            editado_manual INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -142,6 +144,8 @@ def criar_tabelas():
 def migrar_banco(conn):
     cursor = conn.cursor()
     existing = [row[1] for row in cursor.execute("PRAGMA table_info(produtos)").fetchall()]
+    if "editado_manual" not in existing:
+        cursor.execute("ALTER TABLE produtos ADD COLUMN editado_manual INTEGER DEFAULT 0")
     if "lote" not in existing:
         cursor.execute("ALTER TABLE produtos ADD COLUMN lote TEXT DEFAULT ''")
     if "data_vencimento" not in existing:

@@ -248,6 +248,7 @@ def sincronizar_rt_oficial(caminho_arquivo=None, limpar_antigos=False):
 
         # PK oficial = EAN da planilha (não o codigo_omie)
         existente = _buscar_produto_db(ean)
+        corrigido_manual = bool(existente.get("editado_manual")) if existente else False
         if existente and (existente.get("ean") or "") == ean:
             ean_alvo = ean
             mudou = (
@@ -255,7 +256,7 @@ def sincronizar_rt_oficial(caminho_arquivo=None, limpar_antigos=False):
                 or (existente.get("marca") or "") != marca
                 or (existente.get("codigo_interno") or "") != codigo_interno
             )
-            if mudou:
+            if mudou and not corrigido_manual:
                 _atualizar(
                     ean_alvo,
                     produto=nome,
@@ -265,10 +266,8 @@ def sincronizar_rt_oficial(caminho_arquivo=None, limpar_antigos=False):
                 atualizados += 1
         else:
             ok, msg = _criar(
-                ean=ean,
-                produto=nome,
-                marca=marca,
-                codigo_interno=codigo_interno,
+                ean=ean, produto=nome, marca=marca, codigo_interno=codigo_interno,
+                editado_manual=False,
             )
             if ok:
                 criados += 1
@@ -283,7 +282,7 @@ def sincronizar_rt_oficial(caminho_arquivo=None, limpar_antigos=False):
 
         for alias in (codigo, omie, ean):
             if alias and alias != ean_alvo:
-                ok_v, _ = vincular_codigo(alias, ean_alvo, origem="rt_oficial")
+                ok_v, _ = vincular_codigo(alias, ean_alvo, origem="rt_oficial", sobrescrever=False)
                 if ok_v:
                     aliases += 1
 
@@ -292,8 +291,11 @@ def sincronizar_rt_oficial(caminho_arquivo=None, limpar_antigos=False):
         eans_ok, _omies_ok = chaves_oficiais()
         for p in _listar_produtos_db(""):
             ean_p = (p.get("ean") or "").strip()
-            # Mantém só o que tem EAN igual ao da planilha (fonte oficial)
+            # Mantém o que tem EAN igual ao da planilha (fonte oficial)
             if ean_p and ean_p in eans_ok:
+                continue
+            # Produtos com correção manual não são apagados pela planilha
+            if bool(p.get("editado_manual")):
                 continue
             try:
                 excluir_produto_completo(ean_p)
@@ -363,10 +365,18 @@ def sincronizar_omie(caminho_arquivo=None):
         )
 
         if ean_alvo:
+            prod_atual = None
             if (por_ean.get(ean_alvo) or "").strip() != codigo:
-                atualizar_produto(ean_alvo, codigo_interno=codigo)
-                por_ean[ean_alvo] = codigo
-                atualizados += 1
+                try:
+                    from .backend import _buscar_produto_db as _buscar
+                    prod_atual = _buscar(ean_alvo)
+                except Exception:
+                    prod_atual = None
+                # Não sobrescreve o códigos dos produtos corrigidos na mão
+                if not (bool(prod_atual.get("editado_manual")) if prod_atual else False):
+                    atualizar_produto(ean_alvo, codigo_interno=codigo)
+                    por_ean[ean_alvo] = codigo
+                    atualizados += 1
         else:
             marca = ""
             nome = descricao
@@ -375,7 +385,7 @@ def sincronizar_omie(caminho_arquivo=None):
                 marca, nome = partes[0], partes[1]
             ok, _ = criar_produto(
                 ean=codigo, produto=nome or codigo, marca=marca,
-                codigo_interno=codigo,
+                codigo_interno=codigo, editado_manual=False,
             )
             if ok:
                 por_ean[codigo] = codigo

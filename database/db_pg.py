@@ -79,7 +79,7 @@ def buscar_produto(ean):
     return None
 
 
-def vincular_codigo(codigo, ean_produto, origem="bip"):
+def vincular_codigo(codigo, ean_produto, origem="bip", sobrescrever=True):
     """Associa um código de barras (GTIN) a um produto Omie (ean)."""
     codigo = (codigo or "").strip()
     ean_produto = (ean_produto or "").strip()
@@ -90,6 +90,21 @@ def vincular_codigo(codigo, ean_produto, origem="bip"):
         if not cur.fetchone():
             return False, "Produto Omie não encontrado"
         try:
+            if not sobrescrever:
+                cur = _exec(conn,
+                    "SELECT origem FROM produto_codigos WHERE codigo = %s",
+                    (codigo,))
+                existe = cur.fetchone()
+                origens_rt = ("rt_planilha", "rt_oficial")
+                if existe:
+                    origem_atual = existe["origem"] if isinstance(existe, dict) else existe[0]
+                    if origem in origens_rt and origem_atual in origens_rt:
+                        _exec(conn,
+                            "UPDATE produto_codigos SET ean_produto = %s, origem = %s WHERE codigo = %s",
+                            (ean_produto, origem, codigo))
+                        conn.commit()
+                        return True, f"Código {codigo} vinculado ao produto {ean_produto}"
+                    return False, f"Código {codigo} já associado manualmente ao produto (mantido)"
             _exec(conn,
                 "INSERT INTO produto_codigos (codigo, ean_produto, origem) VALUES (%s, %s, %s) "
                 "ON CONFLICT (codigo) DO UPDATE SET ean_produto = EXCLUDED.ean_produto, origem = EXCLUDED.origem",
@@ -99,6 +114,53 @@ def vincular_codigo(codigo, ean_produto, origem="bip"):
         except Exception as e:
             conn.rollback()
             return False, str(e)
+
+
+def buscar_por_vinculo_manual(codigo):
+    """Retorna o produto se o código lido tiver uma correção manual (origem bip/edicao)."""
+    codigo = (codigo or "").strip()
+    if not codigo:
+        return None
+    candidatos = [codigo]
+    if codigo.endswith(".0"):
+        candidatos.append(codigo[:-2])
+    sem_zeros = codigo.lstrip("0")
+    if sem_zeros and sem_zeros != codigo:
+        candidatos.append(sem_zeros)
+    with get_db() as conn:
+        for c in candidatos:
+            cur = _exec(conn,
+                "SELECT p.* FROM produto_codigos v "
+                "JOIN produtos p ON p.ean = v.ean_produto "
+                "WHERE v.codigo = %s AND v.origem NOT IN ('rt_planilha', 'rt_oficial')",
+                (c,))
+            row = cur.fetchone()
+            if row:
+                return dict(row)
+    return None
+
+
+def listar_produtos_editados(search=""):
+    """Produtos que receberam correção manual (editado_manual=1)."""
+    with get_db() as conn:
+        if search:
+            cur = _exec(conn,
+                """SELECT * FROM produtos
+                   WHERE editado_manual = 1
+                     AND (ean ILIKE %s OR produto ILIKE %s OR marca ILIKE %s)
+                   ORDER BY produto""",
+                (f"%{search}%", f"%{search}%", f"%{search}%"))
+        else:
+            cur = _exec(conn,
+                "SELECT * FROM produtos WHERE editado_manual = 1 ORDER BY produto")
+        return [dict(r) for r in cur.fetchall()]
+
+
+def listar_aliases():
+    """Todos os vínculos codigo->produto (produto_codigos)."""
+    with get_db() as conn:
+        cur = _exec(conn, "SELECT codigo, ean_produto, origem FROM produto_codigos")
+        return [dict(r) for r in cur.fetchall()]
 
 
 def qtd_contagem_sessao(ean, sessao=""):
@@ -134,16 +196,17 @@ def loja_da_sessao(nome):
 
 def criar_produto(ean, produto, marca="", unidade_medida="UN",
                   base_especifica="", instrucao_dosagem="",
-                  lote="", data_vencimento="", codigo_interno=""):
+                  lote="", data_vencimento="", codigo_interno="", editado_manual=True):
     with get_db() as conn:
         try:
             _exec(conn,
                 """INSERT INTO produtos (ean, produto, marca, unidade_medida,
-                   base_especifica, instrucao_dosagem, lote, data_vencimento, codigo_interno)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                   base_especifica, instrucao_dosagem, lote, data_vencimento, codigo_interno, editado_manual)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (ean, produto.strip(), marca.strip(), unidade_medida,
                  base_especifica.strip(), instrucao_dosagem.strip(),
-                 lote.strip(), data_vencimento.strip(), codigo_interno.strip()),
+                 lote.strip(), data_vencimento.strip(), codigo_interno.strip(),
+                 1 if editado_manual else 0),
             )
             conn.commit()
             return True, "Produto cadastrado com sucesso"
@@ -155,7 +218,7 @@ def criar_produto(ean, produto, marca="", unidade_medida="UN",
             return False, str(e)
 
 
-def atualizar_produto(ean, ean_novo=None, **kwargs):
+def atualizar_produto(ean, ean_novo=None, editado_manual=None, **kwargs):
     ean = (ean or "").strip()
     novo_ean = (ean_novo or "").strip() or ean
     campos = []
@@ -166,6 +229,9 @@ def atualizar_produto(ean, ean_novo=None, **kwargs):
                                        "lote", "data_vencimento", "codigo_interno"):
             campos.append(f"{key} = %s")
             valores.append(val.strip() if isinstance(val, str) else val)
+    if editado_manual is not None:
+        campos.append("editado_manual = %s")
+        valores.append(1 if editado_manual else 0)
     if not ean or not novo_ean:
         return False, "EAN inválido"
 
@@ -178,10 +244,10 @@ def atualizar_produto(ean, ean_novo=None, **kwargs):
                 _exec(conn,
                     """INSERT INTO produtos (ean, produto, marca, unidade_medida,
                        base_especifica, instrucao_dosagem, lote, data_vencimento,
-                       codigo_interno, quantidade_estoque, created_at, updated_at)
+                       codigo_interno, quantidade_estoque, editado_manual, created_at, updated_at)
                        SELECT %s, produto, marca, unidade_medida,
                        base_especifica, instrucao_dosagem, lote, data_vencimento,
-                       codigo_interno, quantidade_estoque, created_at, CURRENT_TIMESTAMP
+                       codigo_interno, quantidade_estoque, editado_manual, created_at, CURRENT_TIMESTAMP
                        FROM produtos WHERE ean = %s""",
                     (novo_ean, ean),
                 )
@@ -219,7 +285,7 @@ def atualizar_produto(ean, ean_novo=None, **kwargs):
             # EAN antigo continua apontando para o produto (etiquetas antigas/planilha RT)
             if ean != novo_ean:
                 try:
-                    vincular_codigo(ean, novo_ean, origem="edicao")
+                    vincular_codigo(ean, novo_ean, origem="edicao", sobrescrever=True)
                 except Exception:
                     pass
             return True, msg
